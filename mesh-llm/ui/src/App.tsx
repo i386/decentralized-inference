@@ -1216,31 +1216,35 @@ function AppHeader({
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">Direct Endpoint URL</div>
                 {apiDirectUrl ? (
-                  <code className="block overflow-x-auto whitespace-nowrap rounded-md border bg-muted/40 px-2 py-1.5 text-xs">
-                    {apiDirectUrl}
-                  </code>
+                  <div className="flex items-center gap-2">
+                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded border px-2 py-1.5 text-xs">
+                      {apiDirectUrl}
+                    </code>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void copyApiDirectUrl()}>
+                      {apiDirectCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+                      {apiDirectCopied ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
                 ) : (
                   <div className="text-xs text-muted-foreground">Direct endpoint unavailable until status is loaded.</div>
                 )}
-                <Button type="button" size="sm" variant="secondary" disabled={!apiDirectUrl} onClick={() => void copyApiDirectUrl()}>
-                  {apiDirectCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
-                  {apiDirectCopied ? 'Copied' : 'Copy endpoint URL'}
-                </Button>
               </div>
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">API Key Token</div>
                 {apiKeyToken ? (
-                  <code className="block overflow-x-auto whitespace-nowrap rounded-md border bg-muted/40 px-2 py-1.5 text-xs">
-                    {apiKeyToken}
-                  </code>
+                  <div className="flex items-center gap-2">
+                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded border px-2 py-1.5 text-xs">
+                      {apiKeyToken}
+                    </code>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void copyApiKeyToken()}>
+                      {apiTokenCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+                      {apiTokenCopied ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
                 ) : (
                   <div className="text-xs text-muted-foreground">Token unavailable until status is loaded.</div>
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" size="sm" variant="outline" disabled={!apiKeyToken} onClick={() => void copyApiKeyToken()}>
-                    {apiTokenCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
-                    {apiTokenCopied ? 'Copied' : 'Copy token'}
-                  </Button>
                   <Button
                     type="button"
                     size="sm"
