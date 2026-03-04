@@ -1216,13 +1216,19 @@ function AppHeader({
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">Direct Endpoint URL</div>
                 {apiDirectUrl ? (
-                  <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded border px-2 py-1.5 text-xs">
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-1.5">
+                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-xs">
                       {apiDirectUrl}
                     </code>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void copyApiDirectUrl()}>
-                      {apiDirectCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
-                      {apiDirectCopied ? 'Copied' : 'Copy'}
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0"
+                      aria-label="Copy endpoint URL"
+                      onClick={() => void copyApiDirectUrl()}
+                    >
+                      {apiDirectCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
                 ) : (
@@ -1232,19 +1238,25 @@ function AppHeader({
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">API Key Token</div>
                 {apiKeyToken ? (
-                  <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded border px-2 py-1.5 text-xs">
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-1.5">
+                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-xs">
                       {apiKeyToken}
                     </code>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void copyApiKeyToken()}>
-                      {apiTokenCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
-                      {apiTokenCopied ? 'Copied' : 'Copy'}
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0"
+                      aria-label="Copy API key token"
+                      onClick={() => void copyApiKeyToken()}
+                    >
+                      {apiTokenCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
                 ) : (
                   <div className="text-xs text-muted-foreground">Token unavailable until status is loaded.</div>
                 )}
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button
                     type="button"
                     size="sm"
