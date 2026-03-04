@@ -1763,6 +1763,9 @@ impl Node {
                 peer.rtt_ms = Some(rtt_ms);
                 tracing::info!("Peer {} RTT: {}ms", remote.fmt_short(), rtt_ms);
             }
+            let peer_count = state.peers.len();
+            drop(state);
+            let _ = self.peer_change_tx.send(peer_count);
         }
 
         // Discover new peers (only on initial join, not heartbeat)
@@ -1834,6 +1837,9 @@ impl Node {
                             if let Some(peer) = state.peers.get_mut(&remote) {
                                 peer.rtt_ms = Some(rtt_ms);
                             }
+                            let peer_count = state.peers.len();
+                            drop(state);
+                            let _ = self.peer_change_tx.send(peer_count);
                         }
                         break;
                     }
@@ -1929,7 +1935,6 @@ impl Node {
         }
         if let Some(existing) = state.peers.get_mut(&id) {
             let role_changed = existing.role != ann.role;
-            let serving_changed = existing.serving != ann.serving;
             if role_changed {
                 tracing::info!(
                     "Peer {} role updated: {:?} → {:?}",
@@ -1948,11 +1953,10 @@ impl Node {
             existing.available_models = ann.available_models.clone();
             existing.requested_models = ann.requested_models.clone();
             existing.request_rates = ann.request_rates.clone();
-            if role_changed || serving_changed {
-                let count = state.peers.len();
-                drop(state);
-                let _ = self.peer_change_tx.send(count);
-            }
+            // Emit on every peer announcement update so SSE stays fully live.
+            let count = state.peers.len();
+            drop(state);
+            let _ = self.peer_change_tx.send(count);
             return;
         }
         tracing::info!(

@@ -5,9 +5,9 @@
 //!   GET  /api/events    — SSE stream of status updates
 //!   GET  /api/discover  — browse Nostr-published meshes
 //!   POST /api/chat      — proxy to inference API
-//!   GET  /              — console HTML dashboard
+//!   GET  /              — embedded web dashboard
 //!
-//! The console is read-only — shows status, topology, models.
+//! The dashboard is read-only — shows status, topology, models.
 //! All mutations happen via CLI flags (--join, --model, --auto).
 
 use crate::{download, election, mesh, nostr};
@@ -20,6 +20,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{watch, Mutex};
 
 static CONSOLE_DIST: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/ui/dist");
+const MESH_LLM_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // ── Shared state ──
 
@@ -47,6 +48,7 @@ struct ApiInner {
 
 #[derive(Serialize)]
 struct StatusPayload {
+    version: String,
     node_id: String,
     token: String,
     api_key_token: String,
@@ -77,6 +79,7 @@ struct PeerPayload {
     models: Vec<String>,
     vram_gb: f64,
     serving: Option<String>,
+    rtt_ms: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -186,6 +189,7 @@ impl MeshApi {
                 models: p.models.clone(),
                 vram_gb: p.vram_bytes as f64 / 1e9,
                 serving: p.serving.clone(),
+                rtt_ms: p.rtt_ms,
             })
             .collect();
 
@@ -275,6 +279,7 @@ impl MeshApi {
         };
 
         StatusPayload {
+            version: MESH_LLM_VERSION.to_string(),
             node_id,
             token,
             api_key_token,
@@ -486,10 +491,22 @@ async fn handle_request(mut stream: TcpStream, state: &MeshApi) -> anyhow::Resul
     let path_only = path.split('?').next().unwrap_or(path);
 
     match (method, path_only) {
-        // ── Console HTML ──
+        // ── Dashboard UI ──
         ("GET", "/") => {
             if !respond_console_index(&mut stream).await? {
-                respond_error(&mut stream, 500, "Console bundle missing").await?;
+                respond_error(&mut stream, 500, "Dashboard bundle missing").await?;
+            }
+        }
+
+        ("GET", "/dashboard") | ("GET", "/chat") | ("GET", "/dashboard/") | ("GET", "/chat/") => {
+            if !respond_console_index(&mut stream).await? {
+                respond_error(&mut stream, 500, "Dashboard bundle missing").await?;
+            }
+        }
+
+        ("GET", p) if p.starts_with("/chat/") => {
+            if !respond_console_index(&mut stream).await? {
+                respond_error(&mut stream, 500, "Dashboard bundle missing").await?;
             }
         }
 
