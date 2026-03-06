@@ -771,9 +771,12 @@ pub fn smart_auto(
         .collect();
     scored.sort_by(|a, b| b.1.cmp(&a.1));
 
-    // Collect all candidates with positive score (not stale, not full)
+    // Collect viable candidates.
+    // If the user specified --mesh-name, take all candidates (they already
+    // filtered by name above — the user explicitly asked for this mesh).
+    // Otherwise, require positive score to filter out stale/private meshes.
     let viable: Vec<(String, DiscoveredMesh)> = scored.iter()
-        .filter(|(_, score)| *score > 0)
+        .filter(|(_, score)| target_name.is_some() || *score > 0)
         .map(|(m, _)| (m.listing.invite_token.clone(), (*m).clone()))
         .collect();
 
