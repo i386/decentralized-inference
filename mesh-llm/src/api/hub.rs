@@ -23,6 +23,7 @@ const HUB_CONNECTOR_CHUNK_BYTES: usize = 24 * 1024;
 pub(super) struct HubState {
     pub(super) base_url: String,
     pub(super) access_token: Option<String>,
+    pub(super) approved_node_display_name: Option<String>,
     pub(super) auth_pending: bool,
     pub(super) profile: Option<HubProfile>,
     pub(super) default_startup_model: Option<String>,
@@ -51,6 +52,7 @@ pub(super) struct HubProfile {
 #[derive(Serialize, Deserialize, Default)]
 struct HubSessionFile {
     access_token: Option<String>,
+    approved_node_display_name: Option<String>,
     profile: Option<HubProfile>,
     default_startup_model: Option<String>,
     default_mesh_selector: Option<String>,
@@ -130,6 +132,7 @@ pub(super) fn load_state() -> HubState {
     HubState {
         base_url: hub_base_url,
         access_token: session.access_token,
+        approved_node_display_name: session.approved_node_display_name,
         auth_pending: false,
         profile: session.profile,
         default_startup_model: session.default_startup_model,
@@ -386,7 +389,18 @@ pub(super) async fn handle_route(
                                     .and_then(|v| v.as_str())
                                     .map(|s| s.to_string())
                                 {
+                                    let approved_node_display_name = payload
+                                        .get("node_display_name")
+                                        .and_then(|v| v.as_str())
+                                        .map(str::trim)
+                                        .filter(|s| !s.is_empty())
+                                        .map(str::to_string);
                                     state.set_hub_access_token(Some(token)).await;
+                                    state
+                                        .set_hub_approved_node_display_name(
+                                            approved_node_display_name,
+                                        )
+                                        .await;
                                     state.set_hub_auth_pending(false).await;
                                     if let Ok(profile) = state.hub_fetch_profile().await {
                                         state.set_hub_profile(profile).await;
@@ -441,6 +455,7 @@ pub(super) async fn handle_route(
         ("POST", "/api/hub/logout") => {
             state.set_hub_auth_pending(false).await;
             state.set_hub_access_token(None).await;
+            state.set_hub_approved_node_display_name(None).await;
             state.set_hub_profile(None).await;
             state.set_hub_node_id(None).await;
             state
@@ -660,6 +675,7 @@ impl MeshApi {
     fn persist_hub_state(inner: &ApiInner) {
         let _ = save_hub_session(&HubSessionFile {
             access_token: inner.hub.access_token.clone(),
+            approved_node_display_name: inner.hub.approved_node_display_name.clone(),
             profile: inner.hub.profile.clone(),
             default_startup_model: inner.hub.default_startup_model.clone(),
             default_mesh_selector: inner.hub.default_mesh_selector.clone(),
@@ -689,11 +705,27 @@ impl MeshApi {
         let mut inner = self.inner.lock().await;
         inner.hub.access_token = token;
         if inner.hub.access_token.is_none() {
+            inner.hub.approved_node_display_name = None;
             inner.hub.profile = None;
             inner.hub.last_membership_sync_ok_unix = None;
             inner.hub.runtime_access_token = None;
             inner.hub.runtime_access_token_expires_unix = None;
         }
+        Self::persist_hub_state(&inner);
+    }
+
+    async fn hub_approved_node_display_name(&self) -> Option<String> {
+        self.inner
+            .lock()
+            .await
+            .hub
+            .approved_node_display_name
+            .clone()
+    }
+
+    async fn set_hub_approved_node_display_name(&self, node_display_name: Option<String>) {
+        let mut inner = self.inner.lock().await;
+        inner.hub.approved_node_display_name = node_display_name;
         Self::persist_hub_state(&inner);
     }
 
@@ -1025,6 +1057,7 @@ impl MeshApi {
 
     async fn hub_ensure_registered_node(&self) -> anyhow::Result<String> {
         if let Some(existing) = self.hub_registered_node_id().await {
+            self.set_hub_approved_node_display_name(None).await;
             return Ok(existing);
         }
         let Some(token) = self.hub_access_token().await else {
@@ -1069,7 +1102,10 @@ impl MeshApi {
             "inferencehub-v1\npurpose=node_register\nchallenge_id={challenge_id}\nnonce={nonce}\nnode_id=\nts={ts}"
         );
         let signature_b64 = sign_hub_message(&identity, &signed_message)?;
-        let hostname = default_node_display_name();
+        let display_name = self
+            .hub_approved_node_display_name()
+            .await
+            .unwrap_or_else(default_node_display_name);
         let complete_resp = client
             .post(format!("{base_url}/hub/v0/nodes/register/complete"))
             .bearer_auth(&token)
@@ -1078,7 +1114,7 @@ impl MeshApi {
                 "public_key": identity.public_key_b64,
                 "signature": signature_b64,
                 "signed_message": signed_message,
-                "display_name": hostname,
+                "display_name": display_name,
                 "client": {
                     "version": crate::VERSION,
                     "platform": std::env::consts::OS,
@@ -1102,6 +1138,7 @@ impl MeshApi {
             anyhow::bail!("node register response missing node_id");
         }
         self.set_hub_node_id(Some(node_id.clone())).await;
+        self.set_hub_approved_node_display_name(None).await;
         Ok(node_id)
     }
 

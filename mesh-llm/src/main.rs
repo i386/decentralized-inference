@@ -18,6 +18,20 @@ use std::path::PathBuf;
 
 pub const VERSION: &str = "0.25.0";
 
+fn init_rustls_crypto_provider() {
+    eprintln!("🔐 Initializing rustls CryptoProvider (ring)...");
+    match rustls::crypto::ring::default_provider().install_default() {
+        Ok(()) => {
+            eprintln!("✅ rustls CryptoProvider initialized");
+        }
+        Err(_) => {
+            // Another subsystem may have already set a process-wide provider.
+            // That's fine; keep running with the installed provider.
+            eprintln!("ℹ️  rustls CryptoProvider already initialized; using existing provider");
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "mesh-llm", version = VERSION, about = "P2P mesh for distributed llama.cpp inference over QUIC")]
 struct Cli {
@@ -197,6 +211,9 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Install rustls provider before any reqwest/tungstenite/hub connector usage.
+    init_rustls_crypto_provider();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
@@ -2210,7 +2227,12 @@ async fn fetch_hub_mesh_model_hints(
     Ok(ordered_hints)
 }
 
-async fn run_hub_device_sign_in(base_url: &str) -> Result<String> {
+struct HubDeviceSignInResult {
+    access_token: String,
+    approved_node_display_name: Option<String>,
+}
+
+async fn run_hub_device_sign_in(base_url: &str) -> Result<HubDeviceSignInResult> {
     let client = reqwest::Client::new();
     let start_response = client
         .post(format!("{base_url}/hub/v0/device-auth/start"))
@@ -2304,7 +2326,16 @@ async fn run_hub_device_sign_in(base_url: &str) -> Result<String> {
                 .filter(|v| !v.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("authorization succeeded but access_token missing"))?
                 .to_string();
-            return Ok(access_token);
+            let approved_node_display_name = poll_payload
+                .get("node_display_name")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_string);
+            return Ok(HubDeviceSignInResult {
+                access_token,
+                approved_node_display_name,
+            });
         }
 
         if status == "pending" || error == "authorization_pending" {
@@ -2419,9 +2450,11 @@ async fn run_inferencehub_interactive(
         || effective_hub.linked_mesh_id.is_some();
     if has_effective_target && effective_hub.access_token.is_none() {
         let base_url = hub_base_url();
-        let access_token = run_hub_device_sign_in(&base_url).await?;
-        persist_hub_access_token(&access_token)?;
-        effective_hub.access_token = Some(access_token);
+        let sign_in = run_hub_device_sign_in(&base_url).await?;
+        persist_hub_access_token(&sign_in.access_token)?;
+        persist_hub_approved_node_display_name(sign_in.approved_node_display_name.as_deref())?;
+        effective_hub.access_token = Some(sign_in.access_token);
+        effective_hub.approved_node_display_name = sign_in.approved_node_display_name;
         eprintln!("✅ Signed in to InferenceHub.");
     }
 
@@ -2580,6 +2613,7 @@ struct PersistedHubState {
     default_invite_token: Option<String>,
     default_startup_model: Option<String>,
     access_token: Option<String>,
+    approved_node_display_name: Option<String>,
 }
 
 impl PersistedHubState {
@@ -2645,6 +2679,12 @@ fn read_persisted_hub_state() -> PersistedHubState {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(ToOwned::to_owned),
+        approved_node_display_name: json
+            .get("approved_node_display_name")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToOwned::to_owned),
     }
 }
 
@@ -2706,6 +2746,22 @@ fn persist_hub_access_token(access_token: &str) -> anyhow::Result<()> {
             "access_token".to_string(),
             serde_json::Value::String(token.to_string()),
         );
+    })
+}
+
+fn persist_hub_approved_node_display_name(node_display_name: Option<&str>) -> anyhow::Result<()> {
+    update_hub_session_json(|obj| {
+        if let Some(name) = node_display_name
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            obj.insert(
+                "approved_node_display_name".to_string(),
+                serde_json::Value::String(name.to_string()),
+            );
+        } else {
+            obj.remove("approved_node_display_name");
+        }
     })
 }
 
