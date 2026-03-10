@@ -226,10 +226,10 @@ fn gguf_type_info(type_id: u32) -> Option<(usize, usize)> {
         17 => Some((74, 256)),  // IQ2_XS
         18 => Some((98, 256)),  // IQ3_XXS
         19 => Some((50, 256)),  // IQ1_S
-        20 => Some((34, 32)),   // IQ4_NL
+        20 => Some((18, 32)),   // IQ4_NL: half + QK4_NL/2
         21 => Some((110, 256)), // IQ3_S
         22 => Some((82, 256)),  // IQ2_S
-        23 => Some((36, 32)),   // IQ4_XS (using 32 block for iq4)
+        23 => Some((136, 256)), // IQ4_XS: half + uint16 + QK_K/64 + QK_K/2
         24 => Some((1, 1)),     // I8
         25 => Some((2, 1)),     // I16
         26 => Some((4, 1)),     // I32
@@ -270,6 +270,7 @@ struct GgufTensorInfo {
     ne: Vec<u64>,      // dimensions
     type_id: u32,
     offset: u64,       // offset within data section
+    source_part: usize, // which split part this tensor lives in (0 for non-split)
 }
 
 impl GgufTensorInfo {
@@ -284,7 +285,7 @@ impl GgufTensorInfo {
     }
 
     fn is_router_gate(&self) -> bool {
-        self.name.contains("ffn_gate_inp")
+        self.name.contains("ffn_gate_inp") || self.name.contains("exp_probs_b")
     }
 }
 
@@ -294,7 +295,16 @@ struct GgufFile {
     n_kv: u64,
     kv_raw: Vec<u8>,           // raw bytes of all KV pairs
     tensors: Vec<GgufTensorInfo>,
-    data_offset: u64,          // absolute offset where tensor data starts
+    data_offset: u64,          // absolute offset where tensor data starts (part 0 / non-split)
+    /// For split GGUFs: paths and data_offsets for each part file.
+    /// Empty for non-split files.
+    split_parts: Vec<SplitPart>,
+}
+
+/// A part file in a split GGUF.
+struct SplitPart {
+    path: PathBuf,
+    data_offset: u64,
 }
 
 /// Read a GGUF string from a reader: u64 length + bytes.
@@ -394,14 +404,123 @@ fn parse_gguf(path: &Path) -> anyhow::Result<GgufFile> {
         f.read_exact(&mut buf8)?;
         let offset = u64::from_le_bytes(buf8);
 
-        tensors.push(GgufTensorInfo { name, n_dims, ne, type_id, offset });
+        tensors.push(GgufTensorInfo { name, n_dims, ne, type_id, offset, source_part: 0 });
     }
 
     // Data starts after alignment
     let pos = f.stream_position()?;
     let data_offset = pad_to(pos, GGUF_ALIGNMENT);
 
-    Ok(GgufFile { version, n_kv, kv_raw, tensors, data_offset })
+    Ok(GgufFile { version, n_kv, kv_raw, tensors, data_offset, split_parts: vec![] })
+}
+
+/// Parse a split GGUF: reads KV from part 1, tensors from parts 2..N.
+/// `first_part` is the path to the `-00001-of-NNNNN.gguf` file.
+fn parse_gguf_split(first_part: &Path) -> anyhow::Result<GgufFile> {
+    // Discover all part files
+    let fname = first_part.file_name().unwrap().to_string_lossy();
+    // Pattern: FOO-00001-of-00006.gguf
+    let (prefix, n_parts) = parse_split_filename(&fname)
+        .ok_or_else(|| anyhow::anyhow!("not a split GGUF filename: {}", fname))?;
+    let dir = first_part.parent().unwrap_or(Path::new("."));
+
+    let mut part_paths: Vec<PathBuf> = Vec::new();
+    for i in 1..=n_parts {
+        let part_name = format!("{prefix}-{:05}-of-{:05}.gguf", i, n_parts);
+        let part_path = dir.join(&part_name);
+        if !part_path.exists() {
+            anyhow::bail!("missing split part: {}", part_path.display());
+        }
+        part_paths.push(part_path);
+    }
+
+    // Part 1: KV metadata only
+    let part1 = parse_gguf(&part_paths[0])?;
+    if !part1.tensors.is_empty() {
+        // Not all split GGUFs have 0 tensors in part 1, but GLM-5 does
+        eprintln!("  ⚠ Part 1 has {} tensors (unusual)", part1.tensors.len());
+    }
+
+    // Strip split.* KV entries — output is a non-split single file
+    let (kv_raw, n_kv) = strip_split_kv(&part1.kv_raw, part1.n_kv)?;
+
+    // Parts 2..N: tensor info + data
+    let mut all_tensors: Vec<GgufTensorInfo> = Vec::new();
+    // Include any tensors from part 1 (unlikely but safe)
+    for mut t in part1.tensors {
+        t.source_part = 0;
+        all_tensors.push(t);
+    }
+
+    let mut split_parts: Vec<SplitPart> = Vec::new();
+    split_parts.push(SplitPart { path: part_paths[0].clone(), data_offset: part1.data_offset });
+
+    for (idx, part_path) in part_paths[1..].iter().enumerate() {
+        let part = parse_gguf(part_path)?;
+        let part_idx = idx + 1; // 0-indexed within split_parts
+        split_parts.push(SplitPart { path: part_path.clone(), data_offset: part.data_offset });
+        for mut t in part.tensors {
+            t.source_part = part_idx;
+            all_tensors.push(t);
+        }
+    }
+
+    eprintln!("  Split GGUF: {} parts, {} total tensors, {} KV pairs",
+        n_parts, all_tensors.len(), n_kv);
+
+    Ok(GgufFile {
+        version: part1.version,
+        n_kv,
+        kv_raw,
+        tensors: all_tensors,
+        data_offset: split_parts[0].data_offset,
+        split_parts,
+    })
+}
+
+/// Strip `split.*` KV entries from raw KV bytes. Returns (new_kv_raw, new_n_kv).
+fn strip_split_kv(kv_raw: &[u8], n_kv: u64) -> anyhow::Result<(Vec<u8>, u64)> {
+    let mut out = Vec::with_capacity(kv_raw.len());
+    let mut cursor = std::io::Cursor::new(kv_raw);
+    let mut new_n_kv = 0u64;
+
+    for _ in 0..n_kv {
+        let start = cursor.position() as usize;
+        let key = read_gguf_str(&mut cursor)?;
+        let mut buf4 = [0u8; 4];
+        cursor.read_exact(&mut buf4)?;
+        let vtype = u32::from_le_bytes(buf4);
+        skip_gguf_kv_value(&mut cursor, vtype)?;
+        let end = cursor.position() as usize;
+
+        if key.starts_with("split.") {
+            // Skip this KV entry
+            continue;
+        }
+        out.extend_from_slice(&kv_raw[start..end]);
+        new_n_kv += 1;
+    }
+
+    Ok((out, new_n_kv))
+}
+
+/// Parse a split GGUF filename like "Foo-00001-of-00006.gguf" → ("Foo", 6)
+fn parse_split_filename(fname: &str) -> Option<(String, usize)> {
+    let stem = fname.strip_suffix(".gguf")?;
+    let of_pos = stem.rfind("-of-")?;
+    let n_parts: usize = stem[of_pos + 4..].parse().ok()?;
+    let before_of = &stem[..of_pos]; // "Foo-00001"
+    let dash_pos = before_of.rfind('-')?;
+    let part_num: usize = before_of[dash_pos + 1..].parse().ok()?;
+    if part_num != 1 { return None; } // must be part 1
+    let prefix = &before_of[..dash_pos];
+    Some((prefix.to_string(), n_parts))
+}
+
+/// Detect if a path is a split GGUF (matches `-00001-of-NNNNN.gguf` pattern).
+fn is_split_gguf(path: &Path) -> bool {
+    let fname = path.file_name().map(|f| f.to_string_lossy()).unwrap_or_default();
+    parse_split_filename(&fname).is_some()
 }
 
 /// Write GGUF tensor info entry.
@@ -470,6 +589,7 @@ pub fn assemble_shard(
                 ne,
                 type_id: t.type_id,
                 offset: 0, // will recompute
+                source_part: 0,
             });
         } else {
             out_tensors.push(t.clone());
@@ -486,6 +606,7 @@ pub fn assemble_shard(
             ne,
             type_id: t.type_id,
             offset: 0,
+            source_part: 0,
         });
     }
 
@@ -519,9 +640,7 @@ pub fn assemble_shard(
     }
 
     // Pad to alignment before data
-    let pos = 24 + out_kv.len() as u64 + out_tensors.iter().map(|t| {
-        8 + t.name.len() as u64 + 4 + (t.n_dims as u64 * 8) + 4 + 8
-    }).sum::<u64>();
+    let pos = out.stream_position()?;
     let data_start = pad_to(pos, GGUF_ALIGNMENT);
     let padding = data_start - pos;
     write_zeros(&mut out, padding)?;
@@ -670,8 +789,11 @@ fn write_kv_str(w: &mut impl Write, key: &str, val: &str) -> std::io::Result<()>
 /// trunk.gguf gets all non-expert tensors with expert_count=0.
 /// Each expert-NNN.gguf gets that expert's slices with minimal metadata.
 pub fn explode_model(model_path: &Path, output_dir: &Path) -> anyhow::Result<u32> {
-    let model = parse_gguf(model_path)?;
-    let mut f_in = std::fs::File::open(model_path)?;
+    let model = if is_split_gguf(model_path) {
+        parse_gguf_split(model_path)?
+    } else {
+        parse_gguf(model_path)?
+    };
 
     // Find architecture and expert count from KV
     let arch = read_kv_string(&model.kv_raw, "general.architecture")
@@ -694,6 +816,75 @@ pub fn explode_model(model_path: &Path, output_dir: &Path) -> anyhow::Result<u32
         n_expert, trunk_tensors.len(), expert_tensors.len());
 
     std::fs::create_dir_all(output_dir)?;
+
+    // Open all source files for reading tensor data
+    let is_split = !model.split_parts.is_empty();
+    let mut part_files: Vec<std::fs::File> = if is_split {
+        model.split_parts.iter()
+            .map(|p| std::fs::File::open(&p.path))
+            .collect::<std::io::Result<Vec<_>>>()?
+    } else {
+        vec![std::fs::File::open(model_path)?]
+    };
+
+    /// Read `nbytes` for a tensor, handling split-file boundary crossing.
+    /// Returns the filled buffer.
+    fn read_tensor_data(
+        part_files: &mut [std::fs::File],
+        split_parts: &[SplitPart],
+        is_split: bool,
+        data_offset: u64,  // for non-split
+        t: &GgufTensorInfo,
+        nbytes: u64,
+        extra_offset: u64,  // additional offset within the tensor (for expert slicing)
+        buf: &mut Vec<u8>,
+    ) -> anyhow::Result<()> {
+        buf.resize(nbytes as usize, 0);
+        if !is_split {
+            part_files[0].seek(SeekFrom::Start(data_offset + t.offset + extra_offset))?;
+            part_files[0].read_exact(buf)?;
+            return Ok(());
+        }
+
+        let part_idx = t.source_part;
+        let abs_start = split_parts[part_idx].data_offset + t.offset + extra_offset;
+
+        // Try to read from this part file
+        let file_len = part_files[part_idx].seek(SeekFrom::End(0))?;
+        part_files[part_idx].seek(SeekFrom::Start(abs_start))?;
+
+        let avail = if abs_start < file_len { file_len - abs_start } else { 0 };
+
+        if avail >= nbytes {
+            // Entire tensor fits in this part
+            part_files[part_idx].read_exact(buf)?;
+        } else {
+            // Tensor spans into next part file(s)
+            let mut filled = 0usize;
+            if avail > 0 {
+                part_files[part_idx].read_exact(&mut buf[..avail as usize])?;
+                filled = avail as usize;
+            }
+            // Continue from the next part's data section
+            let mut next_part = part_idx + 1;
+            while filled < nbytes as usize {
+                if next_part >= split_parts.len() {
+                    anyhow::bail!("tensor '{}' spans past last split part", t.name);
+                }
+                let next_data_off = split_parts[next_part].data_offset;
+                part_files[next_part].seek(SeekFrom::Start(next_data_off))?;
+                let remain = nbytes as usize - filled;
+                let next_file_len = part_files[next_part].seek(SeekFrom::End(0))?;
+                part_files[next_part].seek(SeekFrom::Start(next_data_off))?;
+                let next_avail = (next_file_len - next_data_off) as usize;
+                let to_read = remain.min(next_avail);
+                part_files[next_part].read_exact(&mut buf[filled..filled + to_read])?;
+                filled += to_read;
+                next_part += 1;
+            }
+        }
+        Ok(())
+    }
 
     // ── Write trunk.gguf ──
     {
@@ -736,9 +927,10 @@ pub fn explode_model(model_path: &Path, output_dir: &Path) -> anyhow::Result<u32
         let mut buf = Vec::new();
         for (out_t, src_t) in trunk_info.iter().zip(trunk_tensors.iter()) {
             let nbytes = src_t.nbytes();
-            buf.resize(nbytes as usize, 0);
-            f_in.seek(SeekFrom::Start(model.data_offset + src_t.offset))?;
-            f_in.read_exact(&mut buf)?;
+            read_tensor_data(
+                &mut part_files, &model.split_parts, is_split,
+                model.data_offset, src_t, nbytes, 0, &mut buf,
+            )?;
             out.write_all(&buf)?;
             let padded = pad_to(nbytes, GGUF_ALIGNMENT);
             write_zeros(&mut out, padded - nbytes)?;
@@ -769,6 +961,7 @@ pub fn explode_model(model_path: &Path, output_dir: &Path) -> anyhow::Result<u32
                 ne,
                 type_id: t.type_id,
                 offset: 0,
+                source_part: 0,
             });
         }
 
@@ -814,10 +1007,11 @@ pub fn explode_model(model_path: &Path, output_dir: &Path) -> anyhow::Result<u32
             let full_nbytes = src_t.nbytes();
             let bytes_per_expert = full_nbytes / n_expert as u64;
 
-            buf.resize(bytes_per_expert as usize, 0);
-            let src_offset = model.data_offset + src_t.offset + (eid as u64 * bytes_per_expert);
-            f_in.seek(SeekFrom::Start(src_offset))?;
-            f_in.read_exact(&mut buf)?;
+            read_tensor_data(
+                &mut part_files, &model.split_parts, is_split,
+                model.data_offset, src_t, bytes_per_expert,
+                eid as u64 * bytes_per_expert, &mut buf,
+            )?;
             out.write_all(&buf)?;
 
             let padded = pad_to(bytes_per_expert, GGUF_ALIGNMENT);
