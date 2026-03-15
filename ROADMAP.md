@@ -8,9 +8,25 @@ Implemented. Heuristic classifier detects Code/Reasoning/Chat/Creative/ToolCall 
 
 Next: static speed estimates in model profiles, response quality checks (retry on garbage), complexity-aware token budgets. See [mesh-llm/docs/ROUTER_V2.md](mesh-llm/docs/ROUTER_V2.md) for the full phased plan.
 
+## Mobile chat app (exemplar)
+
+A native mobile app that joins a mesh by scanning a QR code. Client-only — no GPU, no model serving. Just a beautiful chat interface backed by the mesh's GPU pool.
+
+- Scan QR code → join mesh → chat with any model the mesh serves
+- Uses iroh relay for connectivity (works through NAT, cellular, WiFi)
+- OpenAI-compatible API underneath (same as any mesh client)
+- iOS first (Swift + iroh-ffi), Android follow-up
+- "AirDrop for AI" — one scan and you're talking to a 235B parameter model
+
+This is the best way to show what mesh-llm does: zero setup, zero config, just scan and chat.
+
+## Connection stability
+
+Relay connections degrade over hours on some nodes (Studio pattern: fresh=250ms, 10h=isolated). Need relay health monitoring, periodic reconnect, and better understanding of iroh's relay lifecycle. See [mesh-llm/TODO.md](mesh-llm/TODO.md) for investigation notes.
+
 ## Production relay infrastructure
 
-Currently mesh-llm uses iroh's default public relays for NAT traversal. We have a self-hosted iroh-relay on Fly.io (`relay/`) but it's not the default yet. Dedicated relays in key regions would improve connectivity.
+Currently mesh-llm uses iroh's default public relays for NAT traversal. We have a self-hosted iroh-relay on Fly.io (`relay/`) but it's not the default yet. Dedicated relays in key regions would improve connectivity. May also help with the relay decay issue above.
 
 ## Agent launcher
 
@@ -40,4 +56,4 @@ Partially done. Unified demand map via gossip, standby nodes promote to serve. N
 
 ## Resilience
 
-Done: Nostr re-discovery (v0.26.1), llama-server watchdog (v0.27.0), multi-host load balancing (v0.27.0). Next: tensor split recovery when a peer dies.
+Done: Nostr re-discovery (v0.26.1), llama-server watchdog (v0.27.0), multi-host load balancing (v0.27.0), API deadlock fix (v0.35.1), VRAM-scaled context (v0.35.1). Next: tensor split recovery when a peer dies, relay health monitoring.
