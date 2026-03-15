@@ -51,6 +51,7 @@ The 1024 bidi stream limit is needed for llama.cpp RPC tensor transfers.
 | Custom timeout+keepalive, signed binary, Fly relay+defaults | Old | Dies every 8-13 min |
 | **iroh defaults, signed binary, Local↔Studio** | **Fix** | **10+ min stable (Studio went offline due to VPN)** |
 | **iroh defaults, HEAD build, Local↔Mini** | **Fix** | **15+ min stable, zero drops** |
+| **v0.35.0, mainnet, Local+Studio+Mini+2×Fly** | **Fix** | **15+ min all connected, Studio flapped once then recovered** |
 
 ## Other Issues Found & Fixed
 
