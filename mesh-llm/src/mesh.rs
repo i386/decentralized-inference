@@ -750,6 +750,10 @@ impl Node {
     /// Called from API proxy on every request (including misses for unserved models).
     /// Uses std::sync::Mutex (not tokio) so it can be called from sync context too.
     pub fn record_request(&self, model: &str) {
+        // "auto" is a routing directive, not a real model — don't pollute demand
+        if model == "auto" || model.is_empty() {
+            return;
+        }
         let mut demand = self.model_demand.lock().unwrap();
         let entry = demand.entry(model.to_string()).or_default();
         entry.last_active = now_secs();

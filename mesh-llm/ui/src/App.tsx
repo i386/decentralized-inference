@@ -2728,9 +2728,9 @@ function MarkdownMessage({ content }: { content: string }) {
         '[&_li]:my-0.5',
         '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
         '[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
-        '[&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3',
+        '[&_pre]:my-2 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3',
         '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
-        '[&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs',
+        '[&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_table]:block [&_table]:overflow-x-auto',
         '[&_td]:border [&_td]:border-border/60 [&_td]:px-2 [&_td]:py-1',
         '[&_th]:border [&_th]:border-border/60 [&_th]:bg-muted/40 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left',
         '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5',
@@ -2758,7 +2758,7 @@ function ChatBubble({
 
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
-      <div className="w-full max-w-[92%] md:max-w-[82%]">
+      <div className="w-full min-w-0 max-w-[92%] md:max-w-[82%]">
         <div className="mb-1 flex items-center gap-2 px-1 text-xs text-muted-foreground">
           {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
           <span>{isUser ? 'You' : 'Assistant'}</span>

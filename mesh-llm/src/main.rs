@@ -414,8 +414,11 @@ async fn main() -> Result<()> {
     }
 
     // Build requested model names from all resolved models
+    // Strip split GGUF suffix so "MiniMax-M2.5-Q4_K_M-00001-of-00004" → "MiniMax-M2.5-Q4_K_M"
     let requested_model_names: Vec<String> = resolved_models.iter()
-        .filter_map(|m| m.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string()))
+        .filter_map(|m| m.file_stem().and_then(|s| s.to_str()).map(|s| {
+            router::strip_split_suffix_owned(s)
+        }))
         .collect();
 
     let bin_dir = match &cli.bin_dir {
