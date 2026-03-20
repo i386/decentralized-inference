@@ -805,7 +805,13 @@ export function App() {
     const trimmed = text.trim();
     if ((!trimmed && !pendingImage) || !status || isSending) return;
 
-    const model = selectedModel || status.model_name;
+    // When sending an image with model=auto, route to a vision-capable model
+    // (the server-side router doesn't sniff for images in the request body)
+    let model = selectedModel || status.model_name;
+    if (pendingImage && (!model || model === 'auto')) {
+      const visionModel = warmModels.find((m) => visionModels.has(m));
+      if (visionModel) model = visionModel;
+    }
     const conversationId = activeConversation?.id ?? randomId();
     const userMessage: ChatMessage = { id: randomId(), role: 'user', content: trimmed, model, image: pendingImage ?? undefined };
     const assistantId = randomId();
