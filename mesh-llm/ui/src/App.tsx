@@ -1568,28 +1568,35 @@ function ChatPage(props: {
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Resize to max 512px on longest side — vision encoders tile to ~448px internally
-    // and larger images produce too many tokens for constrained contexts (n_ubatch=512)
-    const img = new Image();
-    img.onload = () => {
-      const MAX = 512;
-      let { width, height } = img;
-      if (width > MAX || height > MAX) {
-        const scale = MAX / Math.max(width, height);
-        width = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      setPendingImage(dataUrl);
-      URL.revokeObjectURL(img.src);
+    // Read as data URL first (handles HEIC, JPEG, PNG — whatever the browser supports)
+    // then resize via canvas to max 512px (vision encoders tile at ~448px internally)
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 512;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          const scale = MAX / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { setPendingImage(src); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        setPendingImage(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => {
+        // Canvas resize failed — send original (may be large but better than nothing)
+        setPendingImage(src);
+      };
+      img.src = src;
     };
-    img.src = URL.createObjectURL(file);
+    reader.readAsDataURL(file);
     e.target.value = '';
   }
 
@@ -1975,7 +1982,7 @@ function InviteFriendEmptyState({ inviteToken, selectedModel, isPublicMesh }: { 
           <BrandIcon className="h-12 w-12 text-primary/50 animate-wiggle" />
         </div>
         <p className="text-sm text-muted-foreground">
-          A shared pool of compute, powered by the community. Chat away.
+          Chat here if you like, powered by shared spare compute capacity.
         </p>
         <button
           type="button"
