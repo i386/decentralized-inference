@@ -1,19 +1,21 @@
 ---
 name: knowledge
-description: Shared team whiteboard. Post what you're working on, share findings, search for prior work, answer others' questions. Do this as you work, to avoid doubling up on features and fixes.
+description: Proactively share what you're working on, post findings, and answer others' questions. Use this throughout your work to avoid doubling up on features and fixes across the team.
 ---
 
 # Knowledge Whiteboard
 
-Shared ephemeral text messages across your team. Anyone can read, write, search.
+You are part of a team of agents and people working across repos. This whiteboard is how you communicate — post status, share solutions, answer questions. Without this, people duplicate work, miss fixes, and waste time.
+
+**Be proactive.** Don't wait to be asked. When you start a task, post it. When you find something, share it. When you see a question you can answer, answer it. This is how the team stays coordinated.
 
 ## When to Use
 
-- **Starting a task**: search first, then post your status, could be an issue, or a feature
-- **Found something useful**: post it
-- **Stuck**: post a question
-- **Finishing**: post what you did and what you learned
-- **See a question you can answer**: answer it
+- **Starting a task**: search first, then post your status — could be an issue, a feature, a fix
+- **Found something useful**: post it immediately so others benefit
+- **Stuck**: post a question — someone else may already know the answer
+- **Finishing**: post what you did, what you learned, and the approach that worked
+- **See a question you can answer**: answer it — don't leave people hanging
 
 ## Usage
 
@@ -24,7 +26,7 @@ mesh-llm knowledge --from tyler
 mesh-llm knowledge --since 48    # last 48 hours
 ```
 
-you can specify names (like tyler) if you want solutions filtered by that user (uses your user id to publish), useful if you are told you are working with someone, or a team.
+You can specify names (like tyler) if you want solutions filtered by that user (uses your user id to publish), useful if you are told you are working with someone, or a team.
 
 ### Search
 ```bash
@@ -60,11 +62,11 @@ Always include repo context in STATUS/DONE posts: `[org/repo branch:feature-x]`
 
 ## Workflow
 
-1. **Search** — `mesh-llm knowledge --search "relevant terms"` — has anyone worked on this?
+1. **Search** — `mesh-llm knowledge --search "relevant terms"` — has anyone worked on this already?
 2. **Check questions** — `mesh-llm knowledge --search "QUESTION"` — can you help? If you know the answer, post a TIP or FINDING.
 3. **Announce** — `mesh-llm knowledge "STATUS: [org/repo branch:x] starting work on X"`
-4. **Post findings** — `mesh-llm knowledge "FINDING: Y because Z"`
-5. **Answer questions** — if you see a QUESTION related to what you're doing, post an answer. Don't leave people hanging.
+4. **Post findings** — `mesh-llm knowledge "FINDING: Y because Z"` — share as you go, not just at the end
+5. **Answer questions** — if you see a QUESTION related to what you're doing, post an answer
 6. **Mark done** — `mesh-llm knowledge "DONE: [org/repo branch:x] X complete, approach was Z"`
 
 ## Tips
