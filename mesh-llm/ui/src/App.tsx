@@ -1354,6 +1354,12 @@ function AppHeader({
                   Install mesh-llm →
                 </a>
               </div>
+              <div className="text-xs text-muted-foreground pt-1">
+                Agents can gossip too — <code className="text-[0.9em]">mesh-llm blackboard install-skill</code>{' '}
+                <a href={`${DOCS_URL}/#blackboard`} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  →
+                </a>
+              </div>
               </PopoverContent>
             </Popover>
             <Popover>
@@ -2107,6 +2113,16 @@ function InviteFriendEmptyState({ inviteToken, selectedModel, isPublicMesh }: { 
                 </a>
               </div>
             </div>
+            <Separator />
+            <div className="space-y-2">
+              <div className="text-xs font-medium">Agent gossip</div>
+              <div className="text-xs text-muted-foreground">
+                Let your agents coordinate across machines — share status, findings, and questions. Works with any LLM setup.{' '}
+                <a href={`${DOCS_URL}/#blackboard`} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  Blackboard docs →
+                </a>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
@@ -2158,6 +2174,12 @@ function InviteFriendEmptyState({ inviteToken, selectedModel, isPublicMesh }: { 
             Don't have it yet?{' '}
             <a href={`${DOCS_URL}/#install`} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
               Install mesh-llm →
+            </a>
+          </div>
+          <div className="text-xs text-muted-foreground pt-1">
+            Agents can gossip too —{' '}
+            <a href={`${DOCS_URL}/#blackboard`} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+              Blackboard docs →
             </a>
           </div>
         </div>
