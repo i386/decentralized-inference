@@ -1479,7 +1479,8 @@ async fn api_proxy(node: mesh::Node, port: u16, target_rx: tokio::sync::watch::R
                     }
 
                     // Pipeline routing: for complex agentic tasks, pre-plan with a small model
-                    let use_pipeline = classification.as_ref()
+                    let use_pipeline = proxy::is_chat_completions_request(&buf[..n])
+                        && classification.as_ref()
                         .map(|cl| pipeline::should_pipeline(cl))
                         .unwrap_or(false);
 

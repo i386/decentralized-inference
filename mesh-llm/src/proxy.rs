@@ -20,14 +20,32 @@ pub async fn peek_request(stream: &TcpStream, buf: &mut [u8]) -> Result<(usize, 
     Ok((n, model))
 }
 
-/// Extract `"model"` field from a JSON POST body in an HTTP request.
-pub fn extract_model_from_http(buf: &[u8]) -> Option<String> {
+fn split_http_request(buf: &[u8]) -> Option<(&str, &str)> {
     let s = std::str::from_utf8(buf).ok()?;
-    let body_start = s.find("\r\n\r\n")? + 4;
-    let body = &s[body_start..];
-    let model_key = "\"model\"";
-    let pos = body.find(model_key)?;
-    let after_key = &body[pos + model_key.len()..];
+    let body_start = s.find("\r\n\r\n")?;
+    Some((&s[..body_start], &s[body_start + 4..]))
+}
+
+fn request_line(buf: &[u8]) -> Option<&str> {
+    let (headers, _) = split_http_request(buf)?;
+    headers.lines().next()
+}
+
+fn header_value<'a>(headers: &'a str, name: &str) -> Option<&'a str> {
+    headers.lines()
+        .skip(1)
+        .find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            key.trim()
+                .eq_ignore_ascii_case(name)
+                .then_some(value.trim())
+        })
+}
+
+fn extract_json_string_field(body: &str, field: &str) -> Option<String> {
+    let key = format!("\"{field}\"");
+    let pos = body.find(&key)?;
+    let after_key = &body[pos + key.len()..];
     let after_colon = after_key.trim_start().strip_prefix(':')?;
     let after_ws = after_colon.trim_start();
     let after_quote = after_ws.strip_prefix('"')?;
@@ -35,21 +53,60 @@ pub fn extract_model_from_http(buf: &[u8]) -> Option<String> {
     Some(after_quote[..end].to_string())
 }
 
+fn multipart_boundary(content_type: &str) -> Option<&str> {
+    content_type
+        .split(';')
+        .map(str::trim)
+        .find_map(|part| part.strip_prefix("boundary=").map(|value| value.trim_matches('"')))
+}
+
+fn extract_multipart_field(body: &str, boundary: &str, field: &str) -> Option<String> {
+    let marker = format!("name=\"{field}\"");
+    let boundary_marker = format!("--{boundary}");
+    for part in body.split(&boundary_marker) {
+        if !part.contains(&marker) {
+            continue;
+        }
+        let body_start = part.find("\r\n\r\n")? + 4;
+        let value = part[body_start..]
+            .trim_matches(|c| c == '\r' || c == '\n')
+            .trim();
+        if !value.is_empty() {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+/// Return the HTTP request path, without any query string.
+pub fn request_path(buf: &[u8]) -> Option<String> {
+    let line = request_line(buf)?;
+    let mut parts = line.split_whitespace();
+    let _method = parts.next()?;
+    let raw_path = parts.next()?;
+    Some(raw_path.split('?').next()?.to_string())
+}
+
+/// Extract `"model"` from a JSON or multipart OpenAI-style request body.
+pub fn extract_model_from_http(buf: &[u8]) -> Option<String> {
+    let (headers, body) = split_http_request(buf)?;
+    if let Some(ct) = header_value(headers, "content-type") {
+        if ct.starts_with("multipart/form-data") {
+            let boundary = multipart_boundary(ct)?;
+            return extract_multipart_field(body, boundary, "model");
+        }
+    }
+    extract_json_string_field(body, "model")
+}
+
 /// Extract a session hint from an HTTP request for MoE sticky routing.
 /// Looks for "user" or "session_id" in the JSON body. Falls back to None.
 pub fn extract_session_hint(buf: &[u8]) -> Option<String> {
-    let s = std::str::from_utf8(buf).ok()?;
-    let body_start = s.find("\r\n\r\n")? + 4;
-    let body = &s[body_start..];
+    let (_, body) = split_http_request(buf)?;
     // Try "user" field first (standard OpenAI parameter)
-    for key in &["\"user\"", "\"session_id\""] {
-        if let Some(pos) = body.find(key) {
-            let after_key = &body[pos + key.len()..];
-            let after_colon = after_key.trim_start().strip_prefix(':')?;
-            let after_ws = after_colon.trim_start();
-            let after_quote = after_ws.strip_prefix('"')?;
-            let end = after_quote.find('"')?;
-            return Some(after_quote[..end].to_string());
+    for key in &["user", "session_id"] {
+        if let Some(value) = extract_json_string_field(body, key) {
+            return Some(value);
         }
     }
     None
@@ -57,21 +114,29 @@ pub fn extract_session_hint(buf: &[u8]) -> Option<String> {
 
 /// Try to parse the JSON body from a peeked HTTP request buffer.
 pub fn extract_body_json(buf: &[u8]) -> Option<serde_json::Value> {
-    let s = std::str::from_utf8(buf).ok()?;
-    let body_start = s.find("\r\n\r\n")? + 4;
-    let body = &s[body_start..];
+    let (_, body) = split_http_request(buf)?;
     serde_json::from_str(body).ok()
 }
 
 pub fn is_models_list_request(buf: &[u8]) -> bool {
-    let s = String::from_utf8_lossy(buf);
-    s.starts_with("GET ") && (s.contains("/v1/models") || s.contains("/models"))
-        && !s.contains("/v1/models/")
+    matches!(
+        (request_line(buf), request_path(buf).as_deref()),
+        (Some(line), Some("/v1/models" | "/models")) if line.starts_with("GET ")
+    )
 }
 
 pub fn is_drop_request(buf: &[u8]) -> bool {
-    let s = String::from_utf8_lossy(buf);
-    s.starts_with("POST ") && s.contains("/mesh/drop")
+    matches!(
+        (request_line(buf), request_path(buf).as_deref()),
+        (Some(line), Some("/mesh/drop")) if line.starts_with("POST ")
+    )
+}
+
+pub fn is_chat_completions_request(buf: &[u8]) -> bool {
+    matches!(
+        (request_line(buf), request_path(buf).as_deref()),
+        (Some(line), Some("/v1/chat/completions")) if line.starts_with("POST ")
+    )
 }
 
 // ── Model-aware tunnel routing ──
@@ -481,5 +546,29 @@ mod tests {
     fn test_extract_model_from_http_basic() {
         let req = b"POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"model\":\"Qwen3-30B\"}";
         assert_eq!(extract_model_from_http(req), Some("Qwen3-30B".to_string()));
+    }
+
+    #[test]
+    fn test_extract_model_from_http_multipart() {
+        let req = b"POST /v1/audio/transcriptions HTTP/1.1\r\nContent-Type: multipart/form-data; boundary=----mesh\r\n\r\n------mesh\r\nContent-Disposition: form-data; name=\"file\"; filename=\"clip.wav\"\r\nContent-Type: audio/wav\r\n\r\n<bytes>\r\n------mesh\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nwhisper-1\r\n------mesh--\r\n";
+        assert_eq!(extract_model_from_http(req), Some("whisper-1".to_string()));
+    }
+
+    #[test]
+    fn test_request_path_strips_query_string() {
+        let req = b"GET /v1/models?limit=20 HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        assert_eq!(request_path(req), Some("/v1/models".to_string()));
+    }
+
+    #[test]
+    fn test_is_models_list_request_exact_path_only() {
+        let req = b"GET /v1/models/abc HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        assert!(!is_models_list_request(req));
+    }
+
+    #[test]
+    fn test_is_chat_completions_request() {
+        let req = b"POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\n\r\n{}";
+        assert!(is_chat_completions_request(req));
     }
 }
