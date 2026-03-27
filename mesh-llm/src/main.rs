@@ -21,6 +21,7 @@ pub use plugins::blackboard::mcp as blackboard_mcp;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use mesh::NodeRole;
+#[cfg(unix)]
 use std::ffi::CString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -3262,26 +3263,26 @@ fn rollback_bundle_replace(
     }
 }
 
+#[cfg(unix)]
 fn exec_current_binary(exe: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        let exe_c = CString::new(exe.as_os_str().as_bytes())
-            .context("Executable path contains an unexpected NUL byte")?;
-        let args: Vec<CString> = std::env::args_os()
-            .map(|arg| {
-                CString::new(arg.as_os_str().as_bytes())
-                    .context("Argument contains an unexpected NUL byte")
-            })
-            .collect::<Result<_>>()?;
-        let mut argv: Vec<*const libc::c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
-        argv.push(std::ptr::null());
-        let rc = unsafe { libc::execv(exe_c.as_ptr(), argv.as_ptr()) };
-        let errno = std::io::Error::last_os_error();
-        anyhow::ensure!(rc != 0, "execv unexpectedly returned success");
-        return Err(errno).context("Failed to restart updated mesh-llm");
-    }
+    let exe_c = CString::new(exe.as_os_str().as_bytes())
+        .context("Executable path contains an unexpected NUL byte")?;
+    let args: Vec<CString> = std::env::args_os()
+        .map(|arg| {
+            CString::new(arg.as_os_str().as_bytes())
+                .context("Argument contains an unexpected NUL byte")
+        })
+        .collect::<Result<_>>()?;
+    let mut argv: Vec<*const libc::c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
+    argv.push(std::ptr::null());
+    let rc = unsafe { libc::execv(exe_c.as_ptr(), argv.as_ptr()) };
+    let errno = std::io::Error::last_os_error();
+    anyhow::ensure!(rc != 0, "execv unexpectedly returned success");
+    Err(errno).context("Failed to restart updated mesh-llm")
+}
 
-    #[allow(unreachable_code)]
+#[cfg(not(unix))]
+fn exec_current_binary(_exe: &Path) -> Result<()> {
     anyhow::bail!("Self-update restart is only supported on Unix")
 }
 
