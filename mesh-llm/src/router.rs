@@ -62,6 +62,10 @@ struct BenchmarkModel {
     #[serde(default = "default_mapping_confidence")]
     mapping_confidence: f64,
     #[serde(default)]
+    source_count: u8,
+    #[serde(default = "default_source_confidence")]
+    source_confidence: f64,
+    #[serde(default)]
     swe_rebench_resolved_rate: Option<f64>,
     #[serde(default)]
     bfcl_overall: Option<f64>,
@@ -70,6 +74,10 @@ struct BenchmarkModel {
 }
 
 fn default_mapping_confidence() -> f64 {
+    1.0
+}
+
+fn default_source_confidence() -> f64 {
     1.0
 }
 
@@ -344,7 +352,14 @@ fn benchmark_agentic_score(model_name: &str) -> Option<f64> {
     } else {
         benchmark.bfcl_overall.map(|score| score * 0.5)
     }?;
-    Some(raw_score * benchmark.mapping_confidence.clamp(0.0, 1.0))
+    let weighted = raw_score
+        * benchmark.mapping_confidence.clamp(0.0, 1.0)
+        * benchmark.source_confidence.clamp(0.0, 1.0);
+    if benchmark.source_count == 0 {
+        None
+    } else {
+        Some(weighted)
+    }
 }
 
 /// Strip split GGUF suffix like "-00001-of-00004" from a model name.
@@ -1194,8 +1209,19 @@ mod tests {
         let exact = benchmark_agentic_score("Qwen3-32B-Q4_K_M").unwrap();
         let family = benchmark_agentic_score("Qwen2.5-32B-Instruct-Q4_K_M").unwrap();
         assert!(exact > family);
-        assert!(exact > 20.0);
-        assert!(family < 20.0);
+        assert!(exact > 18.0);
+        assert!(family < 15.0);
+    }
+
+    #[test]
+    fn test_benchmark_metadata_tracks_source_strength() {
+        let glm = benchmark_for("GLM-4-32B-0414-Q4_K_M").unwrap();
+        assert_eq!(glm.source_count, 2);
+        assert_eq!(glm.source_confidence, 1.0);
+
+        let devstral = benchmark_for("Devstral-Small-2505-Q4_K_M").unwrap();
+        assert_eq!(devstral.source_count, 1);
+        assert_eq!(devstral.source_confidence, 0.7);
     }
 }
 
@@ -1292,4 +1318,19 @@ fn test_agentic_benchmarks_prefer_higher_confidence_match_within_tier() {
     };
     let result = pick_model_classified(&cl, &available);
     assert_eq!(result, Some("Qwen3-32B-Q4_K_M"));
+}
+
+#[test]
+fn test_agentic_benchmarks_prefer_two_source_evidence_when_other_signals_align() {
+    let available = vec![
+        ("GLM-4-32B-0414-Q4_K_M", 20.0),
+        ("Devstral-Small-2505-Q4_K_M", 20.0),
+    ];
+    let cl = Classification {
+        category: Category::ToolCall,
+        complexity: Complexity::Moderate,
+        needs_tools: true,
+    };
+    let result = pick_model_classified(&cl, &available);
+    assert_eq!(result, Some("GLM-4-32B-0414-Q4_K_M"));
 }

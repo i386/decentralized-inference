@@ -51,6 +51,27 @@ def mapping_confidence(entry):
     return DEFAULT_MATCH_CONFIDENCE.get(entry["match_quality"], 0.5)
 
 
+def source_metadata(swe_score, overall_score, agentic_score):
+    has_swe = swe_score is not None
+    has_bfcl = overall_score is not None or agentic_score is not None
+    source_count = int(has_swe) + int(has_bfcl)
+
+    if has_swe and agentic_score is not None:
+        source_confidence = 1.0
+    elif has_swe and overall_score is not None:
+        source_confidence = 0.9
+    elif agentic_score is not None:
+        source_confidence = 0.8
+    elif has_swe:
+        source_confidence = 0.7
+    elif overall_score is not None:
+        source_confidence = 0.55
+    else:
+        source_confidence = 0.0
+
+    return source_count, round(source_confidence, 2)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate mesh-llm benchmark snapshot")
     parser.add_argument(
@@ -115,6 +136,12 @@ def main():
         agentic_score = bfcl_agentic.get(bfcl_agentic_lookup)
         if agentic_score is not None:
             out["bfcl_agentic"] = agentic_score
+
+        source_count, source_confidence = source_metadata(
+            swe_score, overall_score, agentic_score
+        )
+        out["source_count"] = source_count
+        out["source_confidence"] = source_confidence
 
         models.append(out)
 
