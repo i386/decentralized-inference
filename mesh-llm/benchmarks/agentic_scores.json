@@ -107,6 +107,18 @@
     },
     {
       "local_names": [
+        "Gemma-3-1B-it-Q4_K_M"
+      ],
+      "benchmark_name": "Gemma-3-1b-it",
+      "match_quality": "exact",
+      "mapping_confidence": 1.0,
+      "bfcl_overall": 7.17,
+      "bfcl_agentic": 1.61,
+      "source_count": 1,
+      "source_confidence": 0.8
+    },
+    {
+      "local_names": [
         "Gemma-3-27B-it-Q4_K_M"
       ],
       "benchmark_name": "Gemma-3-27b-it",
@@ -140,6 +152,18 @@
       "notes": "Nearest public Llama instruct benchmark entry in BFCL.",
       "bfcl_overall": 31.9,
       "bfcl_agentic": 9.09,
+      "source_count": 1,
+      "source_confidence": 0.8
+    },
+    {
+      "local_names": [
+        "Llama-3.2-1B-Instruct-Q4_K_M"
+      ],
+      "benchmark_name": "Llama-3.2-1B-Instruct",
+      "match_quality": "exact",
+      "mapping_confidence": 1.0,
+      "bfcl_overall": 10.82,
+      "bfcl_agentic": 1.61,
       "source_count": 1,
       "source_confidence": 0.8
     },
@@ -214,6 +238,18 @@
       "notes": "Nearest public large Mistral family FC entry.",
       "bfcl_overall": 38.37,
       "bfcl_agentic": 26.47,
+      "source_count": 1,
+      "source_confidence": 0.8
+    },
+    {
+      "local_names": [
+        "Qwen2.5-0.5B-Instruct-Q4_K_M"
+      ],
+      "benchmark_name": "Qwen3-0.6B",
+      "match_quality": "family",
+      "mapping_confidence": 0.65,
+      "bfcl_overall": 23.93,
+      "bfcl_agentic": 4.8,
       "source_count": 1,
       "source_confidence": 0.8
     },
@@ -303,6 +339,18 @@
       "notes": "Nearest public small Qwen FC entry.",
       "bfcl_overall": 42.57,
       "bfcl_agentic": 13.31,
+      "source_count": 1,
+      "source_confidence": 0.8
+    },
+    {
+      "local_names": [
+        "Qwen3-0.6B-Q4_K_M"
+      ],
+      "benchmark_name": "Qwen3-0.6B",
+      "match_quality": "exact",
+      "mapping_confidence": 1.0,
+      "bfcl_overall": 23.93,
+      "bfcl_agentic": 4.8,
       "source_count": 1,
       "source_confidence": 0.8
     },
@@ -404,6 +452,18 @@
     },
     {
       "local_names": [
+        "Qwen3.5-0.8B-Vision-Q4_K_M"
+      ],
+      "benchmark_name": "Qwen3-8B",
+      "match_quality": "family",
+      "mapping_confidence": 0.65,
+      "bfcl_overall": 42.57,
+      "bfcl_agentic": 13.31,
+      "source_count": 1,
+      "source_confidence": 0.8
+    },
+    {
+      "local_names": [
         "Qwen3.5-27B-Q4_K_M"
       ],
       "benchmark_name": "Qwen3-32B",
@@ -417,7 +477,19 @@
     },
     {
       "local_names": [
-        "Qwen3.5-9B-Q4_K_M"
+        "Qwen3.5-4B-Vision-Q4_K_M"
+      ],
+      "benchmark_name": "Qwen3-4B-Instruct-2507",
+      "match_quality": "family",
+      "mapping_confidence": 0.8,
+      "bfcl_overall": 35.68,
+      "bfcl_agentic": 10.32,
+      "source_count": 1,
+      "source_confidence": 0.8
+    },
+    {
+      "local_names": [
+        "Qwen3.5-9B-Vision-Q4_K_M"
       ],
       "benchmark_name": "Qwen3-8B",
       "match_quality": "family",

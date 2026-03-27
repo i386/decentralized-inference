@@ -262,24 +262,9 @@ def build_benchmark_catalog(swe_snapshot, bfcl_overall_rows, bfcl_agentic_rows):
     return catalog
 
 
-def extract_local_models(router_path: Path):
-    text = router_path.read_text()
-    section = text.split("pub static MODEL_PROFILES: &[ModelProfile] = &[", 1)[1].split("];", 1)[0]
-    blocks = re.findall(r"ModelProfile\s*\{(.*?)\n\s*\},", section, re.S)
-
-    models = []
-    for block in blocks:
-        name_match = re.search(r'name:\s*"([^"]+)"', block)
-        tools_match = re.search(r"tools:\s*(true|false)", block)
-        if not name_match:
-            continue
-        models.append(
-            {
-                "name": name_match.group(1),
-                "tools": tools_match and tools_match.group(1) == "true",
-            }
-        )
-    return models
+def extract_local_models(catalog_path: Path):
+    text = catalog_path.read_text()
+    return [{"name": name} for name in re.findall(r'name:\s*"([^"]+)"', text)]
 
 
 def matching_rule(local_name: str, rules):
@@ -454,7 +439,7 @@ def main():
     swe_path = repo_root / args.swe_snapshot
     aliases_output_path = repo_root / args.aliases_output
     output_path = repo_root / args.output
-    router_path = repo_root / "mesh-llm/src/router.rs"
+    catalog_path = repo_root / "mesh-llm/src/download.rs"
 
     rules = load_json(rules_path)
     swe_snapshot = load_json(swe_path)
@@ -462,14 +447,14 @@ def main():
     bfcl_overall_rows = fetch_csv(rules["bfcl"]["overall_url"])
     bfcl_agentic_rows = fetch_csv(rules["bfcl"]["agentic_url"])
     catalog = build_benchmark_catalog(swe_snapshot, bfcl_overall_rows, bfcl_agentic_rows)
-    local_models = extract_local_models(router_path)
+    local_models = extract_local_models(catalog_path)
 
     aliases = {
         "version": 1,
         "generated_at": date.today().isoformat(),
         "generated_by": "scripts/update_agentic_scores.py",
         "sources": {
-            "router": str(router_path.relative_to(repo_root)),
+            "catalog": str(catalog_path.relative_to(repo_root)),
             "swe_rebench": swe_snapshot["source"],
             "bfcl": rules["bfcl"],
             "rules": str(rules_path.relative_to(repo_root)),
