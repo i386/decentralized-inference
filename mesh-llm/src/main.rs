@@ -3013,7 +3013,7 @@ async fn maybe_self_update(cli: &Cli) -> Result<bool> {
     }
 
     eprintln!("⬇️ Updating mesh-llm v{VERSION} → v{latest}...");
-    match install_latest_bundle(&install_dir, asset_name).await {
+    match install_latest_bundle(&install_dir, &asset_name).await {
         Ok(()) => {
             eprintln!("✅ Updated to v{latest}; restarting");
             std::env::set_var(SELF_UPDATE_ATTEMPTED_ENV, "1");
