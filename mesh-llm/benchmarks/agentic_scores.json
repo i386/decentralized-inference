@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-03-27",
+  "generated_at": "2026-03-28",
   "generated_by": "scripts/update_agentic_scores.py",
   "sources": {
     "swe_rebench": {
@@ -8,7 +8,7 @@
       "notes": "Manual snapshot from the public leaderboard on 2026-03-27."
     },
     "bfcl": {
-      "url": "https://raw.githubusercontent.com/HuanzhiMao/BFCL-Result/main/2025-12-16/score/data_overall.csv",
+      "overall_url": "https://raw.githubusercontent.com/HuanzhiMao/BFCL-Result/main/2025-12-16/score/data_overall.csv",
       "agentic_url": "https://raw.githubusercontent.com/HuanzhiMao/BFCL-Result/main/2025-12-16/score/data_agentic.csv",
       "notes": "Official BFCL public results archive snapshot dated 2025-12-16."
     }
@@ -98,8 +98,8 @@
         "Gemma-3-12B-it-Q4_K_M"
       ],
       "benchmark_name": "Gemma-3-12b-it",
-      "match_quality": "family",
-      "mapping_confidence": 0.7,
+      "match_quality": "exact",
+      "mapping_confidence": 1.0,
       "bfcl_overall": 30.43,
       "bfcl_agentic": 15.76,
       "source_count": 1,
@@ -110,8 +110,8 @@
         "Gemma-3-27B-it-Q4_K_M"
       ],
       "benchmark_name": "Gemma-3-27b-it",
-      "match_quality": "family",
-      "mapping_confidence": 0.7,
+      "match_quality": "exact",
+      "mapping_confidence": 1.0,
       "bfcl_overall": 29.47,
       "bfcl_agentic": 6.77,
       "source_count": 1,
@@ -173,7 +173,7 @@
       ],
       "benchmark_name": "Llama-4-Scout-17B-16E-Instruct",
       "match_quality": "family",
-      "mapping_confidence": 0.7,
+      "mapping_confidence": 0.8,
       "bfcl_overall": 28.13,
       "bfcl_agentic": 11.34,
       "source_count": 1,
@@ -223,7 +223,7 @@
       ],
       "benchmark_name": "Qwen3-14B",
       "match_quality": "family",
-      "mapping_confidence": 0.7,
+      "mapping_confidence": 0.8,
       "bfcl_overall": 41.03,
       "bfcl_agentic": 14.78,
       "source_count": 1,
@@ -235,7 +235,7 @@
       ],
       "benchmark_name": "Qwen3-32B",
       "match_quality": "family",
-      "mapping_confidence": 0.7,
+      "mapping_confidence": 0.8,
       "bfcl_overall": 48.71,
       "bfcl_agentic": 24.08,
       "source_count": 1,
@@ -247,7 +247,7 @@
       ],
       "benchmark_name": "Qwen3-4B-Instruct-2507",
       "match_quality": "family",
-      "mapping_confidence": 0.7,
+      "mapping_confidence": 0.65,
       "bfcl_overall": 35.68,
       "bfcl_agentic": 10.32,
       "source_count": 1,
@@ -361,8 +361,8 @@
         "Qwen3-4B-Q4_K_M"
       ],
       "benchmark_name": "Qwen3-4B-Instruct-2507",
-      "match_quality": "family",
-      "mapping_confidence": 0.7,
+      "match_quality": "exact",
+      "mapping_confidence": 1.0,
       "bfcl_overall": 35.68,
       "bfcl_agentic": 10.32,
       "source_count": 1,
@@ -387,12 +387,9 @@
       "benchmark_name": "Qwen3-Coder-30B-A3B-Instruct",
       "match_quality": "exact",
       "mapping_confidence": 1.0,
-      "notes": "BFCL FC row comes from the closely related Qwen3-30B-A3B instruct family.",
       "swe_rebench_resolved_rate": 23.0,
-      "bfcl_overall": 41.39,
-      "bfcl_agentic": 20.07,
-      "source_count": 2,
-      "source_confidence": 1.0
+      "source_count": 1,
+      "source_confidence": 0.7
     },
     {
       "local_names": [

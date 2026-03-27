@@ -1210,7 +1210,7 @@ mod tests {
         let family = benchmark_agentic_score("Qwen2.5-32B-Instruct-Q4_K_M").unwrap();
         assert!(exact > family);
         assert!(exact > 18.0);
-        assert!(family < 15.0);
+        assert!(family < 16.0);
     }
 
     #[test]
