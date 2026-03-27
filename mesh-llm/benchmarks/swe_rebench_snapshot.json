@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "updated_at": "2026-03-27",
+  "source": {
+    "url": "https://swe-rebench.com/",
+    "notes": "Manual snapshot from the public leaderboard on 2026-03-27."
+  },
+  "scores": [
+    {
+      "name": "Devstral-Small-2-24B-Instruct-2512",
+      "resolved_rate": 40.0
+    },
+    {
+      "name": "GLM-4.6",
+      "resolved_rate": 46.0
+    },
+    {
+      "name": "GLM-4.7 Flash / GLM-4.6",
+      "resolved_rate": 44.3,
+      "notes": "Approximate GLM family signal using nearby public GLM leaderboard entries."
+    },
+    {
+      "name": "MiniMax M2.1",
+      "resolved_rate": 43.4
+    },
+    {
+      "name": "Qwen3-235B-A22B-Instruct-2507",
+      "resolved_rate": 26.5
+    },
+    {
+      "name": "Qwen3-30B-A3B-Instruct-2507",
+      "resolved_rate": 6.8
+    },
+    {
+      "name": "Qwen3-Coder-30B-A3B-Instruct",
+      "resolved_rate": 23.0
+    }
+  ]
+}

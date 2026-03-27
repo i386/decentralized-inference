@@ -59,12 +59,18 @@ struct BenchmarkSnapshot {
 struct BenchmarkModel {
     local_names: Vec<String>,
     benchmark_name: String,
+    #[serde(default = "default_mapping_confidence")]
+    mapping_confidence: f64,
     #[serde(default)]
     swe_rebench_resolved_rate: Option<f64>,
     #[serde(default)]
     bfcl_overall: Option<f64>,
     #[serde(default)]
     bfcl_agentic: Option<f64>,
+}
+
+fn default_mapping_confidence() -> f64 {
+    1.0
 }
 
 /// Static profiles for catalog models.
@@ -333,10 +339,12 @@ fn benchmark_agentic_score(model_name: &str) -> Option<f64> {
     if let Some(score) = benchmark.bfcl_agentic {
         direct.push(score);
     }
-    if !direct.is_empty() {
-        return Some(direct.iter().sum::<f64>() / direct.len() as f64);
-    }
-    benchmark.bfcl_overall.map(|score| score * 0.5)
+    let raw_score = if !direct.is_empty() {
+        Some(direct.iter().sum::<f64>() / direct.len() as f64)
+    } else {
+        benchmark.bfcl_overall.map(|score| score * 0.5)
+    }?;
+    Some(raw_score * benchmark.mapping_confidence.clamp(0.0, 1.0))
 }
 
 /// Strip split GGUF suffix like "-00001-of-00004" from a model name.
@@ -1180,6 +1188,15 @@ mod tests {
             "Qwen3-235B-A22B-Instruct-2507"
         );
     }
+
+    #[test]
+    fn test_benchmark_score_scales_by_mapping_confidence() {
+        let exact = benchmark_agentic_score("Qwen3-32B-Q4_K_M").unwrap();
+        let family = benchmark_agentic_score("Qwen2.5-32B-Instruct-Q4_K_M").unwrap();
+        assert!(exact > family);
+        assert!(exact > 20.0);
+        assert!(family < 20.0);
+    }
 }
 
 #[test]
@@ -1263,16 +1280,16 @@ fn test_agentic_deep_strongly_prefers_biggest() {
 }
 
 #[test]
-fn test_agentic_benchmarks_can_break_tier_ties() {
+fn test_agentic_benchmarks_prefer_higher_confidence_match_within_tier() {
     let available = vec![
         ("Qwen3-32B-Q4_K_M", 20.0),
-        ("Devstral-Small-2505-Q4_K_M", 20.0),
+        ("Qwen2.5-32B-Instruct-Q4_K_M", 20.0),
     ];
     let cl = Classification {
-        category: Category::Code,
-        complexity: Complexity::Deep,
+        category: Category::Reasoning,
+        complexity: Complexity::Moderate,
         needs_tools: true,
     };
     let result = pick_model_classified(&cl, &available);
-    assert_eq!(result, Some("Devstral-Small-2505-Q4_K_M"));
+    assert_eq!(result, Some("Qwen3-32B-Q4_K_M"));
 }
