@@ -1,5 +1,8 @@
 /// Smart model router — classifies requests and picks the best model.
+use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
 // ── Request categories ──────────────────────────────────────────────
 
@@ -45,6 +48,23 @@ pub struct ModelProfile {
     /// Whether this model can handle tool-calling requests (function calling).
     /// Models without this set to true are filtered out when tools are present.
     pub tools: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct BenchmarkSnapshot {
+    models: Vec<BenchmarkModel>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct BenchmarkModel {
+    local_names: Vec<String>,
+    benchmark_name: String,
+    #[serde(default)]
+    swe_rebench_resolved_rate: Option<f64>,
+    #[serde(default)]
+    bfcl_overall: Option<f64>,
+    #[serde(default)]
+    bfcl_agentic: Option<f64>,
 }
 
 /// Static profiles for catalog models.
@@ -281,6 +301,42 @@ pub fn profile_for(model_name: &str) -> Option<&'static ModelProfile> {
         return MODEL_PROFILES.iter().find(|p| p.name == clean);
     }
     None
+}
+
+fn benchmark_index() -> &'static HashMap<String, BenchmarkModel> {
+    static INDEX: OnceLock<HashMap<String, BenchmarkModel>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        let snapshot: BenchmarkSnapshot =
+            serde_json::from_str(include_str!("../benchmarks/agentic_scores.json"))
+                .expect("benchmark snapshot must be valid JSON");
+        let mut out = HashMap::new();
+        for model in snapshot.models {
+            for local_name in &model.local_names {
+                out.insert(local_name.clone(), model.clone());
+            }
+        }
+        out
+    })
+}
+
+fn benchmark_for(model_name: &str) -> Option<&'static BenchmarkModel> {
+    let clean = strip_split_suffix(model_name);
+    benchmark_index().get(clean)
+}
+
+fn benchmark_agentic_score(model_name: &str) -> Option<f64> {
+    let benchmark = benchmark_for(model_name)?;
+    let mut direct = Vec::new();
+    if let Some(score) = benchmark.swe_rebench_resolved_rate {
+        direct.push(score);
+    }
+    if let Some(score) = benchmark.bfcl_agentic {
+        direct.push(score);
+    }
+    if !direct.is_empty() {
+        return Some(direct.iter().sum::<f64>() / direct.len() as f64);
+    }
+    benchmark.bfcl_overall.map(|score| score * 0.5)
 }
 
 /// Strip split GGUF suffix like "-00001-of-00004" from a model name.
@@ -695,7 +751,17 @@ pub fn pick_model_classified<'a>(
                 (tok_s / 5.0).min(20.0) as i32
             };
 
-            let score = match_bonus + tier_bonus + position_bonus + speed_bonus;
+            // Checked-in benchmark snapshots help auto/tool routing prefer models
+            // that have public agentic evidence beyond the static tier table.
+            let benchmark_bonus = if classification.needs_tools {
+                benchmark_agentic_score(name)
+                    .map(|score| score.round() as i32)
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+
+            let score = match_bonus + tier_bonus + position_bonus + speed_bonus + benchmark_bonus;
             (*name, score)
         })
         .collect();
@@ -1104,6 +1170,16 @@ mod tests {
         assert_eq!(p.unwrap().name, "MiniMax-M2.5-Q4_K_M");
         assert_eq!(p.unwrap().tier, 4);
     }
+
+    #[test]
+    fn test_benchmark_lookup_handles_split_gguf() {
+        let benchmark = benchmark_for("Qwen3-235B-A22B-Q4_K_M-00001-of-00004");
+        assert!(benchmark.is_some());
+        assert_eq!(
+            benchmark.unwrap().benchmark_name,
+            "Qwen3-235B-A22B-Instruct-2507"
+        );
+    }
 }
 
 #[test]
@@ -1184,4 +1260,19 @@ fn test_agentic_deep_strongly_prefers_biggest() {
     };
     let result = pick_model_classified(&cl, &available);
     assert_eq!(result, Some("MiniMax-M2.5-Q4_K_M"));
+}
+
+#[test]
+fn test_agentic_benchmarks_can_break_tier_ties() {
+    let available = vec![
+        ("Qwen3-32B-Q4_K_M", 20.0),
+        ("Devstral-Small-2505-Q4_K_M", 20.0),
+    ];
+    let cl = Classification {
+        category: Category::Code,
+        complexity: Complexity::Deep,
+        needs_tools: true,
+    };
+    let result = pick_model_classified(&cl, &available);
+    assert_eq!(result, Some("Devstral-Small-2505-Q4_K_M"));
 }

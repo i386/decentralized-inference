@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "updated_at": "2026-03-27",
+  "sources": {
+    "swe_rebench": {
+      "url": "https://swe-rebench.com/",
+      "notes": "Manual snapshot from the public leaderboard on 2026-03-27."
+    },
+    "bfcl": {
+      "url": "https://raw.githubusercontent.com/HuanzhiMao/BFCL-Result/main/2025-12-16/score/data_overall.csv",
+      "agentic_url": "https://raw.githubusercontent.com/HuanzhiMao/BFCL-Result/main/2025-12-16/score/data_agentic.csv",
+      "notes": "Official BFCL public results archive snapshot dated 2025-12-16."
+    }
+  },
+  "models": [
+    {
+      "local_names": ["Llama-3.1-405B-Instruct-Q2_K"],
+      "benchmark_name": "Llama-3.3-70B-Instruct (FC)",
+      "bfcl_overall": 31.9,
+      "match_quality": "family",
+      "notes": "Nearest public Llama instruct benchmark entry in BFCL."
+    },
+    {
+      "local_names": ["Qwen3-Coder-30B-A3B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-Coder-30B-A3B-Instruct",
+      "swe_rebench_resolved_rate": 23.0,
+      "bfcl_overall": 41.39,
+      "match_quality": "exact",
+      "notes": "SWE-rebench resolved rate plus BFCL FC row for the closely related Qwen3-30B-A3B instruct family."
+    },
+    {
+      "local_names": ["Qwen3-235B-A22B-Q4_K_M"],
+      "benchmark_name": "Qwen3-235B-A22B-Instruct-2507",
+      "swe_rebench_resolved_rate": 26.5,
+      "bfcl_overall": 47.99,
+      "bfcl_agentic": 38.94,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen2.5-72B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-32B",
+      "bfcl_overall": 48.71,
+      "bfcl_agentic": 24.08,
+      "match_quality": "family",
+      "notes": "Nearest public dense Qwen instruct FC entry."
+    },
+    {
+      "local_names": ["Llama-3.3-70B-Instruct-Q4_K_M"],
+      "benchmark_name": "Llama-3.3-70B-Instruct (FC)",
+      "bfcl_overall": 31.9,
+      "match_quality": "exact"
+    },
+    {
+      "local_names": ["Mixtral-8x22B-Instruct-Q4_K_M"],
+      "benchmark_name": "mistral-large-2411 (FC)",
+      "bfcl_overall": 38.37,
+      "match_quality": "family",
+      "notes": "Nearest public large Mistral family FC entry."
+    },
+    {
+      "local_names": ["Qwen3-32B-Q4_K_M"],
+      "benchmark_name": "Qwen3-32B",
+      "bfcl_overall": 48.71,
+      "bfcl_agentic": 24.08,
+      "match_quality": "exact"
+    },
+    {
+      "local_names": ["Qwen2.5-Coder-32B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-Coder-30B-A3B-Instruct",
+      "swe_rebench_resolved_rate": 23.0,
+      "bfcl_overall": 41.39,
+      "match_quality": "family",
+      "notes": "Nearest public open coder/tool Qwen entry."
+    },
+    {
+      "local_names": ["Qwen3-30B-A3B-Q4_K_M"],
+      "benchmark_name": "Qwen3-30B-A3B-Instruct-2507",
+      "bfcl_overall": 41.39,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen2.5-32B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-32B",
+      "bfcl_overall": 48.71,
+      "bfcl_agentic": 24.08,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen3-8B-Q4_K_M"],
+      "benchmark_name": "Qwen3-8B",
+      "bfcl_overall": 42.57,
+      "match_quality": "exact"
+    },
+    {
+      "local_names": ["Devstral-Small-2505-Q4_K_M"],
+      "benchmark_name": "Devstral-Small-2-24B-Instruct-2512",
+      "swe_rebench_resolved_rate": 40.0,
+      "match_quality": "family",
+      "notes": "Nearest public SWE-rebench Devstral 24B entry."
+    },
+    {
+      "local_names": ["MiniMax-M2.5-Q4_K_M"],
+      "benchmark_name": "MiniMax M2.1",
+      "swe_rebench_resolved_rate": 43.4,
+      "match_quality": "family",
+      "notes": "Nearest public SWE-rebench MiniMax M2 family entry."
+    },
+    {
+      "local_names": ["Qwen3-Coder-Next-Q4_K_M"],
+      "benchmark_name": "Qwen3-Coder-Next",
+      "match_quality": "exact",
+      "notes": "Public SWE-rebench leaderboard calls this out as one of the leading open-source agentic models, but the page did not expose a clean resolved-rate export in this first pass."
+    },
+    {
+      "local_names": ["Mistral-Small-3.1-24B-Instruct-Q4_K_M"],
+      "benchmark_name": "Mistral-small-2506 (FC)",
+      "bfcl_overall": 37.15,
+      "match_quality": "family",
+      "notes": "Nearest public BFCL Mistral Small FC entry."
+    },
+    {
+      "local_names": ["GLM-4.7-Flash-Q4_K_M"],
+      "benchmark_name": "GLM-4.7 Flash / GLM-4.6",
+      "swe_rebench_resolved_rate": 44.3,
+      "bfcl_overall": 72.38,
+      "bfcl_agentic": 66.6,
+      "match_quality": "family",
+      "notes": "Combined GLM family signal: BFCL exact for GLM-4.6 and SWE-rebench signal from the neighboring GLM family entries."
+    },
+    {
+      "local_names": ["GLM-4-32B-0414-Q4_K_M"],
+      "benchmark_name": "GLM-4.6",
+      "swe_rebench_resolved_rate": 46.0,
+      "bfcl_overall": 72.38,
+      "bfcl_agentic": 66.6,
+      "match_quality": "family",
+      "notes": "Nearest public GLM FC benchmark entry."
+    },
+    {
+      "local_names": ["Llama-4-Scout-Q4_K_M"],
+      "benchmark_name": "Llama-4-Scout-17B-16E-Instruct (FC)",
+      "bfcl_overall": 28.13,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen3-14B-Q4_K_M"],
+      "benchmark_name": "Qwen3-14B",
+      "bfcl_overall": 41.03,
+      "match_quality": "exact"
+    },
+    {
+      "local_names": ["Qwen2.5-14B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-14B",
+      "bfcl_overall": 41.03,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen2.5-Coder-14B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-14B",
+      "bfcl_overall": 41.03,
+      "match_quality": "family",
+      "notes": "Nearest public 14B Qwen tool-capable benchmark entry."
+    },
+    {
+      "local_names": ["Gemma-3-12B-it-Q4_K_M"],
+      "benchmark_name": "Gemma-3-12b-it (Prompt)",
+      "bfcl_overall": 30.43,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Gemma-3-27B-it-Q4_K_M"],
+      "benchmark_name": "Gemma-3-27b-it (Prompt)",
+      "bfcl_overall": 29.47,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen3.5-27B-Q4_K_M"],
+      "benchmark_name": "Qwen3-32B",
+      "bfcl_overall": 48.71,
+      "bfcl_agentic": 24.08,
+      "match_quality": "family",
+      "notes": "Nearest public dense Qwen family FC entry."
+    },
+    {
+      "local_names": ["Qwen3.5-9B-Q4_K_M"],
+      "benchmark_name": "Qwen3-8B",
+      "bfcl_overall": 42.57,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen2.5-Coder-7B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-8B",
+      "bfcl_overall": 42.57,
+      "match_quality": "family",
+      "notes": "Nearest public small Qwen FC entry."
+    },
+    {
+      "local_names": ["Qwen3-4B-Q4_K_M"],
+      "benchmark_name": "Qwen3-4B-Instruct-2507 (FC)",
+      "bfcl_overall": 35.68,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Qwen2.5-3B-Instruct-Q4_K_M"],
+      "benchmark_name": "Qwen3-4B-Instruct-2507 (FC)",
+      "bfcl_overall": 35.68,
+      "match_quality": "family"
+    },
+    {
+      "local_names": ["Llama-3.2-3B-Instruct-Q4_K_M"],
+      "benchmark_name": "Llama-3.2-3B-Instruct (FC)",
+      "bfcl_overall": 21.95,
+      "match_quality": "exact"
+    }
+  ]
+}
