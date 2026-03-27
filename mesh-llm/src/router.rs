@@ -1,5 +1,8 @@
 /// Smart model router — classifies requests and picks the best model.
+use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
 // ── Request categories ──────────────────────────────────────────────
 
@@ -32,255 +35,94 @@ pub struct Classification {
     pub needs_tools: bool,
 }
 
-// ── Model profiles ──────────────────────────────────────────────────
+// ── Benchmark snapshots ─────────────────────────────────────────────
 
-/// Quality tier: higher = better quality, slower.
-/// 1 = draft/tiny, 2 = good, 3 = strong, 4 = frontier
-pub type Tier = u8;
-
-pub struct ModelProfile {
-    pub name: &'static str,
-    pub strengths: &'static [Category],
-    pub tier: Tier,
-    /// Whether this model can handle tool-calling requests (function calling).
-    /// Models without this set to true are filtered out when tools are present.
-    pub tools: bool,
+#[derive(Debug, Deserialize)]
+struct BenchmarkSnapshot {
+    models: Vec<BenchmarkModel>,
 }
 
-/// Static profiles for catalog models.
-/// Order of strengths matters — first entry is primary strength.
-pub static MODEL_PROFILES: &[ModelProfile] = &[
-    // ── Tier 4: Frontier ────────────────────────────────────────
-    ModelProfile {
-        name: "Qwen3-235B-A22B-Q4_K_M",
-        strengths: &[
-            Category::Code,
-            Category::Reasoning,
-            Category::Chat,
-            Category::Creative,
-        ],
-        tier: 4,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Llama-3.1-405B-Instruct-Q2_K",
-        strengths: &[Category::Chat, Category::Reasoning, Category::Code],
-        tier: 4,
-        tools: true,
-    },
-    ModelProfile {
-        name: "MiniMax-M2.5-Q4_K_M",
-        strengths: &[
-            Category::Code,
-            Category::Reasoning,
-            Category::Chat,
-            Category::Creative,
-            Category::ToolCall,
-        ],
-        tier: 4,
-        tools: true,
-    },
-    // ── Tier 3: Strong ──────────────────────────────────────────
-    ModelProfile {
-        name: "Qwen2.5-72B-Instruct-Q4_K_M",
-        strengths: &[Category::Chat, Category::Reasoning, Category::Code],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Llama-3.3-70B-Instruct-Q4_K_M",
-        strengths: &[Category::Chat, Category::ToolCall, Category::Code],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "DeepSeek-R1-Distill-70B-Q4_K_M",
-        strengths: &[Category::Reasoning],
-        tier: 3,
-        tools: false, // reasoning-only, no tool support
-    },
-    ModelProfile {
-        name: "Mixtral-8x22B-Instruct-Q4_K_M",
-        strengths: &[Category::Chat, Category::Code, Category::Reasoning],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen3-32B-Q4_K_M",
-        strengths: &[Category::Reasoning, Category::Code, Category::Chat],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen2.5-Coder-32B-Instruct-Q4_K_M",
-        strengths: &[Category::Code],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "DeepSeek-R1-Distill-Qwen-32B-Q4_K_M",
-        strengths: &[Category::Reasoning],
-        tier: 3,
-        tools: false,
-    },
-    ModelProfile {
-        name: "Qwen3-30B-A3B-Q4_K_M",
-        strengths: &[Category::Chat, Category::Reasoning, Category::Code],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M",
-        strengths: &[Category::Code, Category::ToolCall],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen2.5-32B-Instruct-Q4_K_M",
-        strengths: &[
-            Category::Chat,
-            Category::Reasoning,
-            Category::Code,
-            Category::ToolCall,
-        ],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Gemma-3-27B-it-Q4_K_M",
-        strengths: &[Category::Reasoning, Category::Chat],
-        tier: 3,
-        tools: false, // unreliable tool calling
-    },
-    ModelProfile {
-        name: "Qwen3.5-27B-Q4_K_M",
-        strengths: &[Category::Code, Category::Reasoning, Category::Chat],
-        tier: 3,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen3-Coder-Next-Q4_K_M",
-        strengths: &[Category::Code, Category::ToolCall, Category::Reasoning],
-        tier: 4,
-        tools: true,
-    },
-    // ── Tier 2: Good ────────────────────────────────────────────
-    ModelProfile {
-        name: "Qwen3.5-9B-Q4_K_M",
-        strengths: &[Category::Chat, Category::Code],
-        tier: 2,
-        tools: false,
-    },
-    ModelProfile {
-        name: "Mistral-Small-3.1-24B-Instruct-Q4_K_M",
-        strengths: &[Category::Chat, Category::ToolCall],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Devstral-Small-2505-Q4_K_M",
-        strengths: &[Category::Code, Category::ToolCall],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "GLM-4.7-Flash-Q4_K_M",
-        strengths: &[Category::Chat, Category::ToolCall],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "GLM-4-32B-0414-Q4_K_M",
-        strengths: &[Category::Chat, Category::ToolCall, Category::Code],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Llama-4-Scout-Q4_K_M",
-        strengths: &[Category::Chat, Category::ToolCall],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen3-14B-Q4_K_M",
-        strengths: &[Category::Chat, Category::Reasoning],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen2.5-14B-Instruct-Q4_K_M",
-        strengths: &[Category::Chat],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen2.5-Coder-14B-Instruct-Q4_K_M",
-        strengths: &[Category::Code],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "DeepSeek-R1-Distill-Qwen-14B-Q4_K_M",
-        strengths: &[Category::Reasoning],
-        tier: 2,
-        tools: false,
-    },
-    ModelProfile {
-        name: "Gemma-3-12B-it-Q4_K_M",
-        strengths: &[Category::Chat, Category::Reasoning],
-        tier: 2,
-        tools: false,
-    },
-    ModelProfile {
-        name: "Qwen3-8B-Q4_K_M",
-        strengths: &[Category::Chat, Category::Code],
-        tier: 2,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Hermes-2-Pro-Mistral-7B-Q4_K_M",
-        strengths: &[Category::Chat],
-        tier: 2,
-        tools: false,
-    },
-    ModelProfile {
-        name: "Qwen2.5-Coder-7B-Instruct-Q4_K_M",
-        strengths: &[Category::Code],
-        tier: 2,
-        tools: true,
-    },
-    // ── Tier 1: Small / Draft ───────────────────────────────────
-    ModelProfile {
-        name: "Qwen3-4B-Q4_K_M",
-        strengths: &[Category::Chat],
-        tier: 1,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Qwen2.5-3B-Instruct-Q4_K_M",
-        strengths: &[Category::Chat],
-        tier: 1,
-        tools: true,
-    },
-    ModelProfile {
-        name: "Llama-3.2-3B-Instruct-Q4_K_M",
-        strengths: &[Category::Chat, Category::ToolCall],
-        tier: 1,
-        tools: true,
-    },
-];
+#[derive(Debug, Clone, Deserialize)]
+struct BenchmarkModel {
+    local_names: Vec<String>,
+    benchmark_name: String,
+    #[serde(default = "default_mapping_confidence")]
+    mapping_confidence: f64,
+    #[serde(default)]
+    source_count: u8,
+    #[serde(default = "default_source_confidence")]
+    source_confidence: f64,
+    #[serde(default)]
+    swe_rebench_resolved_rate: Option<f64>,
+    #[serde(default)]
+    bfcl_overall: Option<f64>,
+    #[serde(default)]
+    bfcl_agentic: Option<f64>,
+}
 
-pub fn profile_for(model_name: &str) -> Option<&'static ModelProfile> {
-    // Direct match first
-    if let Some(p) = MODEL_PROFILES.iter().find(|p| p.name == model_name) {
-        return Some(p);
-    }
-    // Strip split GGUF suffix: "Model-00001-of-00004" → "Model"
+fn default_mapping_confidence() -> f64 {
+    1.0
+}
+
+fn default_source_confidence() -> f64 {
+    1.0
+}
+
+fn benchmark_index() -> &'static HashMap<String, BenchmarkModel> {
+    static INDEX: OnceLock<HashMap<String, BenchmarkModel>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        let snapshot: BenchmarkSnapshot =
+            serde_json::from_str(include_str!("../benchmarks/agentic_scores.json"))
+                .expect("benchmark snapshot must be valid JSON");
+        let mut out = HashMap::new();
+        for model in snapshot.models {
+            for local_name in &model.local_names {
+                out.insert(local_name.clone(), model.clone());
+            }
+        }
+        out
+    })
+}
+
+fn benchmark_for(model_name: &str) -> Option<&'static BenchmarkModel> {
     let clean = strip_split_suffix(model_name);
-    if clean != model_name {
-        return MODEL_PROFILES.iter().find(|p| p.name == clean);
+    benchmark_index().get(clean)
+}
+
+fn benchmark_agentic_score(model_name: &str) -> Option<f64> {
+    let benchmark = benchmark_for(model_name)?;
+    let mut direct = Vec::new();
+    if let Some(score) = benchmark.swe_rebench_resolved_rate {
+        direct.push(score);
     }
-    None
+    if let Some(score) = benchmark.bfcl_agentic {
+        direct.push(score);
+    }
+    let raw_score = if !direct.is_empty() {
+        Some(direct.iter().sum::<f64>() / direct.len() as f64)
+    } else {
+        benchmark.bfcl_overall.map(|score| score * 0.5)
+    }?;
+    let weighted = raw_score
+        * benchmark.mapping_confidence.clamp(0.0, 1.0)
+        * benchmark.source_confidence.clamp(0.0, 1.0);
+    if benchmark.source_count == 0 {
+        None
+    } else {
+        Some(weighted)
+    }
+}
+
+fn benchmark_supports_tools(model_name: &str) -> bool {
+    let Some(benchmark) = benchmark_for(model_name) else {
+        return false;
+    };
+    if benchmark.source_count == 0 || benchmark.mapping_confidence < 0.5 {
+        return false;
+    }
+    benchmark.bfcl_agentic.is_some()
+        || benchmark.bfcl_overall.is_some()
+        || benchmark.swe_rebench_resolved_rate.is_some()
 }
 
 /// Strip split GGUF suffix like "-00001-of-00004" from a model name.
@@ -625,7 +467,7 @@ pub fn pick_model_classified<'a>(
     let filtered: Vec<(&str, f64)> = if classification.needs_tools {
         available_models
             .iter()
-            .filter(|(name, _)| profile_for(name).map(|p| p.tools).unwrap_or(false))
+            .filter(|(name, _)| benchmark_supports_tools(name))
             .copied()
             .collect()
     } else {
@@ -638,64 +480,35 @@ pub fn pick_model_classified<'a>(
         &filtered
     };
 
-    let category = classification.category;
-
-    // Score each available model
+    // Score each available model.
+    // Static tier/strength routing is intentionally removed: ranking now comes
+    // from benchmark evidence plus runtime speed.
     let mut scored: Vec<(&str, i32)> = candidates
         .iter()
         .map(|(name, tok_s)| {
-            let profile = profile_for(name);
-            let tier = profile.map(|p| p.tier).unwrap_or(1) as i32;
-
-            // Task match is the primary signal.
-            let has_match = profile
-                .map(|p| p.strengths.contains(&category))
-                .unwrap_or(false);
-
-            let match_bonus = if has_match { 1000 } else { 0 };
-
-            // Within matched models: primary > secondary > listed
-            let position_bonus = profile
-                .map(|p| {
-                    p.strengths
-                        .iter()
-                        .position(|s| *s == category)
-                        .map(|i| match i {
-                            0 => 20,
-                            1 => 10,
-                            _ => 5,
-                        })
-                        .unwrap_or(0)
-                })
-                .unwrap_or(0);
-
-            // Agentic vs chat scoring:
-            // When tools are needed, strongly prefer the most capable model.
-            // For chat, prefer the fastest model that matches.
-            let tier_bonus = if classification.needs_tools {
-                // Agentic: always prefer strongest. Tier dominates.
-                // tier 1→20, tier 2→40, tier 3→60, tier 4→80
-                tier * 20
-            } else {
-                // Chat/no-tools: always prefer bigger models, but less aggressively
-                // than agentic. Small models are fallbacks, not first choice.
-                match classification.complexity {
-                    Complexity::Quick => tier * 5,     // tier 2→10, tier 3→15, tier 4→20
-                    Complexity::Moderate => tier * 10, // tier 2→20, tier 3→30, tier 4→40
-                    Complexity::Deep => tier * 15,     // tier 2→30, tier 3→45, tier 4→60
-                }
-            };
-
-            // Speed bonus: higher for chat (speed matters), lower for agentic (quality matters)
             let speed_bonus = if classification.needs_tools {
-                // Agentic: speed is a tiebreaker only
                 (tok_s / 20.0).min(5.0) as i32
             } else {
-                // Chat: speed matters more
                 (tok_s / 5.0).min(20.0) as i32
             };
 
-            let score = match_bonus + tier_bonus + position_bonus + speed_bonus;
+            let benchmark_bonus = if classification.needs_tools {
+                benchmark_agentic_score(name)
+                    .map(|score| score.round() as i32)
+                    .unwrap_or(0)
+            } else {
+                match classification.complexity {
+                    Complexity::Quick => 0,
+                    Complexity::Moderate => benchmark_agentic_score(name)
+                        .map(|score| (score / 4.0).round() as i32)
+                        .unwrap_or(0),
+                    Complexity::Deep => benchmark_agentic_score(name)
+                        .map(|score| (score / 3.0).round() as i32)
+                        .unwrap_or(0),
+                }
+            };
+
+            let score = speed_bonus + benchmark_bonus;
             (*name, score)
         })
         .collect();
@@ -936,8 +749,7 @@ mod tests {
 
     #[test]
     fn test_pick_model_primary_strength_wins() {
-        // Qwen3-8B (tier 2, Chat primary) and 235B (tier 4, Chat 3rd) score within
-        // 15 points at Moderate complexity, so either is a valid pick (load spread).
+        // For chat routing, speed still matters and nearby scores can load-spread.
         let available = vec![("Qwen3-8B-Q4_K_M", 50.0), ("Qwen3-235B-A22B-Q4_K_M", 20.0)];
         let result = pick_model_classified(
             &Classification {
@@ -952,8 +764,7 @@ mod tests {
 
     #[test]
     fn test_deep_complexity_prefers_bigger() {
-        // Deep complexity amplifies tier bonus, but scores are within 15 points
-        // so load spread makes either a valid pick.
+        // Deep chat can let benchmark quality offset slower speed.
         let available = vec![("Qwen3-8B-Q4_K_M", 50.0), ("Qwen3-235B-A22B-Q4_K_M", 20.0)];
         let result = pick_model_classified(
             &Classification {
@@ -968,8 +779,7 @@ mod tests {
 
     #[test]
     fn test_quick_complexity_prefers_smaller() {
-        // Quick complexity: both score within 15 points (load spread applies).
-        // Either is a valid pick — the key property is neither is excluded.
+        // Quick chat should skew hard toward speed.
         let available = vec![
             ("Qwen3-8B-Q4_K_M", 50.0),
             ("Qwen2.5-72B-Instruct-Q4_K_M", 10.0),
@@ -982,15 +792,16 @@ mod tests {
             },
             &available,
         );
-        assert!(result == Some("Qwen3-8B-Q4_K_M") || result == Some("Qwen2.5-72B-Instruct-Q4_K_M"));
+        assert_eq!(result, Some("Qwen3-8B-Q4_K_M"));
     }
 
     #[test]
     fn test_pick_model_prefers_strength_match() {
-        // Same tier, same speed — scores within 15 points, load spread applies.
+        // With static strengths removed, moderate non-tool routing still respects
+        // benchmark quality when speed is equal.
         let available = vec![
-            ("DeepSeek-R1-Distill-70B-Q4_K_M", 10.0), // tier 3, reasoning specialist
-            ("Qwen2.5-72B-Instruct-Q4_K_M", 10.0),    // tier 3, chat primary
+            ("DeepSeek-R1-Distill-70B-Q4_K_M", 10.0),
+            ("Qwen2.5-72B-Instruct-Q4_K_M", 10.0),
         ];
         let result = pick_model_classified(
             &Classification {
@@ -1000,15 +811,12 @@ mod tests {
             },
             &available,
         );
-        assert!(
-            result == Some("DeepSeek-R1-Distill-70B-Q4_K_M")
-                || result == Some("Qwen2.5-72B-Instruct-Q4_K_M")
-        );
+        assert_eq!(result, Some("DeepSeek-R1-Distill-70B-Q4_K_M"));
     }
 
     #[test]
     fn test_pick_model_code_specialist() {
-        // Same tier, same speed — scores within 15 points, load spread applies.
+        // Benchmark quality can still distinguish nearby non-tool choices.
         let available = vec![
             ("Qwen2.5-Coder-32B-Instruct-Q4_K_M", 15.0),
             ("Qwen2.5-32B-Instruct-Q4_K_M", 15.0),
@@ -1021,10 +829,7 @@ mod tests {
             },
             &available,
         );
-        assert!(
-            result == Some("Qwen2.5-Coder-32B-Instruct-Q4_K_M")
-                || result == Some("Qwen2.5-32B-Instruct-Q4_K_M")
-        );
+        assert_eq!(result, Some("Qwen2.5-Coder-32B-Instruct-Q4_K_M"));
     }
 
     #[test]
@@ -1058,20 +863,6 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_lookup() {
-        assert!(profile_for("Qwen3-235B-A22B-Q4_K_M").is_some());
-        assert_eq!(profile_for("Qwen3-235B-A22B-Q4_K_M").unwrap().tier, 4);
-        assert!(profile_for("nonexistent").is_none());
-    }
-
-    #[test]
-    fn test_all_profiles_have_strengths() {
-        for p in MODEL_PROFILES {
-            assert!(!p.strengths.is_empty(), "{} has no strengths", p.name);
-        }
-    }
-
-    #[test]
     fn test_classify_empty_tools_is_not_tool_call() {
         let body = json!({
             "messages": [{"role": "user", "content": "hello"}],
@@ -1098,11 +889,33 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_for_split_gguf() {
-        let p = profile_for("MiniMax-M2.5-Q4_K_M-00001-of-00004");
-        assert!(p.is_some());
-        assert_eq!(p.unwrap().name, "MiniMax-M2.5-Q4_K_M");
-        assert_eq!(p.unwrap().tier, 4);
+    fn test_benchmark_lookup_handles_split_gguf() {
+        let benchmark = benchmark_for("Qwen3-235B-A22B-Q4_K_M-00001-of-00004");
+        assert!(benchmark.is_some());
+        assert_eq!(
+            benchmark.unwrap().benchmark_name,
+            "Qwen3-235B-A22B-Instruct-2507"
+        );
+    }
+
+    #[test]
+    fn test_benchmark_score_scales_by_mapping_confidence() {
+        let exact = benchmark_agentic_score("Qwen3-32B-Q4_K_M").unwrap();
+        let family = benchmark_agentic_score("Qwen2.5-32B-Instruct-Q4_K_M").unwrap();
+        assert!(exact > family);
+        assert!(exact > 18.0);
+        assert!(family < 16.0);
+    }
+
+    #[test]
+    fn test_benchmark_metadata_tracks_source_strength() {
+        let glm = benchmark_for("GLM-4-32B-0414-Q4_K_M").unwrap();
+        assert_eq!(glm.source_count, 2);
+        assert_eq!(glm.source_confidence, 1.0);
+
+        let devstral = benchmark_for("Devstral-Small-2505-Q4_K_M").unwrap();
+        assert_eq!(devstral.source_count, 1);
+        assert_eq!(devstral.source_confidence, 0.7);
     }
 }
 
@@ -1184,4 +997,34 @@ fn test_agentic_deep_strongly_prefers_biggest() {
     };
     let result = pick_model_classified(&cl, &available);
     assert_eq!(result, Some("MiniMax-M2.5-Q4_K_M"));
+}
+
+#[test]
+fn test_agentic_benchmarks_prefer_higher_confidence_match_within_tier() {
+    let available = vec![
+        ("Qwen3-32B-Q4_K_M", 20.0),
+        ("Qwen2.5-32B-Instruct-Q4_K_M", 20.0),
+    ];
+    let cl = Classification {
+        category: Category::Reasoning,
+        complexity: Complexity::Moderate,
+        needs_tools: true,
+    };
+    let result = pick_model_classified(&cl, &available);
+    assert_eq!(result, Some("Qwen3-32B-Q4_K_M"));
+}
+
+#[test]
+fn test_agentic_benchmarks_prefer_two_source_evidence_when_other_signals_align() {
+    let available = vec![
+        ("GLM-4-32B-0414-Q4_K_M", 20.0),
+        ("Devstral-Small-2505-Q4_K_M", 20.0),
+    ];
+    let cl = Classification {
+        category: Category::ToolCall,
+        complexity: Complexity::Moderate,
+        needs_tools: true,
+    };
+    let result = pick_model_classified(&cl, &available);
+    assert_eq!(result, Some("GLM-4-32B-0414-Q4_K_M"));
 }

@@ -173,6 +173,10 @@ stop:
     pkill -f "llama-server" 2>/dev/null || true
     echo "Stopped"
 
+# Regenerate checked-in benchmark routing snapshot
+refresh-benchmarks:
+    python3 scripts/update_agentic_scores.py
+
 # Quick test inference (works with any running server on 8080 or 8090)
 test port="9337":
     curl -s http://localhost:{{port}}/v1/chat/completions \
