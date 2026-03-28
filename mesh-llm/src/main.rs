@@ -1,4 +1,5 @@
 mod api;
+mod autoupdate;
 mod download;
 mod election;
 mod hardware;
@@ -15,6 +16,7 @@ mod rewrite;
 mod router;
 mod tunnel;
 
+pub(crate) use autoupdate::{latest_release_version, version_newer};
 pub use plugins::blackboard;
 pub use plugins::blackboard::mcp as blackboard_mcp;
 
@@ -88,6 +90,10 @@ struct Cli {
     /// Internal plugin service mode.
     #[arg(long, hide = true)]
     plugin: Option<String>,
+
+    /// Disable startup self-update for this process.
+    #[arg(long, hide = true)]
+    no_self_update: bool,
 
     // ── Advanced options (hidden from default --help) ─────────────
     /// Draft model for speculative decoding.
@@ -325,16 +331,22 @@ async fn main() -> Result<()> {
         return plugin::run_plugin_process(name).await;
     }
 
+    let checked_updates = if autoupdate::startup_self_update_enabled(&cli) {
+        autoupdate::maybe_self_update(&cli).await?
+    } else {
+        false
+    };
+
     // Clean up orphan processes from previous runs (skip for client — never runs llama-server)
     if !cli.client {
         launch::kill_llama_server().await;
         launch::kill_orphan_rpc_servers().await;
     }
 
-    // Background version check (non-blocking)
-    tokio::spawn(async {
-        check_for_update().await;
-    });
+    // Finish the release check before startup continues.
+    if !checked_updates {
+        autoupdate::check_for_update().await;
+    }
 
     // Subcommand dispatch
     if let Some(cmd) = &cli.command {
@@ -2988,42 +3000,6 @@ fn install_skill() -> Result<()> {
     Ok(())
 }
 
-async fn check_for_update() {
-    if let Some(latest) = latest_release_version().await {
-        if version_newer(&latest, VERSION) {
-            eprintln!("💡 Update available: v{VERSION} → v{latest}  https://github.com/michaelneale/mesh-llm/releases");
-            eprintln!("   curl -fsSL https://raw.githubusercontent.com/michaelneale/mesh-llm/main/install.sh | bash");
-        }
-    }
-}
-
-pub(crate) async fn latest_release_version() -> Option<String> {
-    let url = "https://api.github.com/repos/michaelneale/mesh-llm/releases/latest";
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
-        .build()
-        .ok()?;
-    let resp = client
-        .get(url)
-        .header("User-Agent", "mesh-llm")
-        .send()
-        .await
-        .ok()?;
-    let body: serde_json::Value = resp.json().await.ok()?;
-    let tag = body["tag_name"].as_str()?;
-    let latest = tag.trim_start_matches('v').trim();
-    if latest.is_empty() {
-        None
-    } else {
-        Some(latest.to_string())
-    }
-}
-
-pub(crate) fn version_newer(a: &str, b: &str) -> bool {
-    let parse = |v: &str| -> Vec<u32> { v.split('.').filter_map(|s| s.parse().ok()).collect() };
-    parse(a) > parse(b)
-}
-
 /// Build the list of models this node is serving for gossip announcement.
 /// `resolved_models` comes from explicit `--model` args (may be empty for `--auto`).
 /// `model_name` is the actual model we're about to serve (always set).
@@ -3106,12 +3082,5 @@ mod tests {
         let result = build_serving_list(&resolved, "MiniMax-M2.5-Q4_K_M-00001-of-00004");
         assert_eq!(result, vec!["MiniMax-M2.5-Q4_K_M"]);
         assert_eq!(result.len(), 1);
-    }
-
-    #[test]
-    fn test_version_newer() {
-        assert!(version_newer("0.33.1", "0.33.0"));
-        assert!(!version_newer("0.33.0", "0.33.0"));
-        assert!(!version_newer("0.32.0", "0.33.0"));
     }
 }
