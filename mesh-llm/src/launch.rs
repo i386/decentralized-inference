@@ -169,8 +169,9 @@ pub async fn start_llama_server(
         rpc_arg
     );
 
-    let log_file = std::fs::File::create("/tmp/mesh-llm-llama-server.log")
-        .context("Failed to create llama-server log file")?;
+    let llama_log = format!("/tmp/mesh-llm-llama-{http_port}.log");
+    let log_file = std::fs::File::create(&llama_log)
+        .with_context(|| format!("Failed to create llama-server log file {llama_log}"))?;
     let log_file2 = log_file.try_clone()?;
 
     // llama-server uses --rpc only for remote workers.
